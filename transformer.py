@@ -2,6 +2,8 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 
+angle_scaling = 1000
+
 class MultiHeadSelfAttention(layers.Layer):
     def __init__(self, embed_dim, num_heads):
         super(MultiHeadSelfAttention, self).__init__()
@@ -82,6 +84,23 @@ class TokenAndPositionEmbedding(layers.Layer):
         positions = self.pos_emb(positions)
         x = self.token_emb(x)
         return x + positions
+        
+def positional_encoding(position, d_model):
+    angle_rads = get_angles(
+        np.arange(position)[:, np.newaxis],
+        np.arange(d_model)[np.newaxis, :],
+        d_model
+    )
+
+    angle_rads[:, 0::2] = np.sin(angle_rads[:, 0::2])
+    angle_rads[:, 1::2] = np.cos(angle_rads[:, 1::2])
+
+    pos_encoding = angle_rads[np.newaxis, ...]
+    return tf.cast(pos_encoding, dtype=tf.float32)
+
+def get_angles(pos, i, d_model):
+    angle_rates = 1 / np.power(angle_scaling, (2 * (i//2)) / np.float32(d_model))
+    return pos * angle_rates
 
 class TransformerEncoder(layers.Layer):
     def __init__(self, num_layers, embed_dim, num_heads, ff_dim, rate=0.1):
@@ -131,10 +150,8 @@ class Transformer(keras.Model):
         rate=0.1,
     ):
         super(Transformer, self).__init__()
-        self.encoder = TransformerEncoder(num_layers, embed_dim, num_heads, ff_dim, rate)
-        self.decoder = TransformerDecoder(num_layers, embed_dim, num_heads, ff_dim, rate)
-        ##self.encoder = TransformerEncoder(num_layers, embed_dim, num_heads, ff_dim, input_vocab_size, pe_input, rate)
-        ##self.decoder = TransformerDecoder(num_layers, embed_dim, num_heads, ff_dim, target_vocab_size, pe_target, rate)
+        self.encoder = TransformerEncoder(num_layers, embed_dim, num_heads, ff_dim, input_vocab_size, pe_input, rate)
+        self.decoder = TransformerDecoder(num_layers, embed_dim, num_heads, ff_dim, target_vocab_size, pe_target, rate)
         self.final_layer = layers.Dense(target_vocab_size, activation="softmax")
     
     @tf.function
@@ -145,27 +162,7 @@ class Transformer(keras.Model):
         final_outputs = self.final_layer(decoder_outputs) #which bit to flip
         return final_outputs
 
-class Transformer(keras.Model):
-    def __init__(
-        self,
-        num_layers,
-        embed_dim,
-        num_heads,
-        ff_dim,
-        target_vocab_size,
-        rate=0.1,
-    ):
-        super(Transformer, self).__init__()
-        self.encoder = TransformerEncoder(num_layers, embed_dim, num_heads, ff_dim, rate)
-        self.decoder = TransformerDecoder(num_layers, embed_dim, num_heads, ff_dim, rate)
-        self.final_layer = layers.Dense(target_vocab_size, activation="softmax")
 
-    def call(self, inputs, training=False):
-        input_seq, target_seq = inputs  # input: (LLR, codeword)
-        encoder_outputs = self.encoder(input_seq, training=training)
-        decoder_outputs = self.decoder(target_seq, encoder_outputs, training=training)
-        final_outputs = self.final_layer(decoder_outputs)  # output: which bit to flip
-        return final_outputs
 '''    
     @tf.function
     def train_step(self, data):
