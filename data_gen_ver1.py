@@ -57,8 +57,15 @@ if __name__ == '__main__':
                 Y_0, Y_soft_0, PM_0, CRC_flag_0 = polar.SCL_decoder(x, Flip, []) # first SCL
                 Y_hat = Y_0
                 
-                locals()['Flip_list'+str(Order+1)] = np.asarray(polar.Flip_choice(PM))
-                locals()['Flip_list'+str(Order+1)] = np.expand_dims(locals()['Flip_list'+str(Order+1)], axis=1)
+                # 初始化字典以儲存 Flip_list
+                Flip_lists = {}
+
+                # 產生 Flip_list[Order + 1]
+                Flip_lists[Order + 1] = np.asarray(polar.Flip_choice(PM))
+                Flip_lists[Order + 1] = np.expand_dims(Flip_lists[Order + 1], axis=1)
+                
+                ##locals()['Flip_list'+str(Order+1)] = np.asarray(polar.Flip_choice(PM))
+                ##locals()['Flip_list'+str(Order+1)] = np.expand_dims(locals()['Flip_list'+str(Order+1)], axis=1)
                 
                 while(np.any(CRC_flag)==False):
                     Flip = 1
@@ -73,7 +80,9 @@ if __name__ == '__main__':
                     j=0
                     while(j<pow(T,Order)):
                         #str_pm = '_'.join([str(x) for x in locals()['Flip_list'+str(Order)][j]])
-                        Y_hat, Y_soft, locals()['PM_'+str(Order)], CRC_flag = polar.SCL_decoder(x, Flip, locals()['Flip_list'+str(Order)][j])
+                        Y_hat, Y_soft, PM_tmp, CRC_flag = polar.SCL_decoder(x, Flip, Flip_lists[Order][j])
+                        #Y_hat, Y_soft, locals()['PM_'+str(Order)], CRC_flag = polar.SCL_decoder(x, Flip, locals()['Flip_list'+str(Order)][j])
+
                         if((np.any(CRC_flag)==True)):
                         
                             
@@ -81,8 +90,10 @@ if __name__ == '__main__':
                             y_all.append(Y_0)
                             y_soft_all.append(Y_soft_0)
                             pm_all.append(PM_0)
-                            crc_sydrome_all.append(CRC_Syndrom_0)
-                            flip_choice_all.append(locals()['Flip_list'+str(Order)][j])
+                            ##crc_sydrome_all.append(CRC_Syndrom_0)
+                            flip_choice_all.append(Flip_lists[Order][j])
+                            ##flip_choice_all.append(locals()['Flip_list'+str(Order)][j])
+                            
                             '''
                             flip_correct = locals()['Flip_list'+str(Order)][j]
                             with open(filename_2, 'a') as f2:
@@ -109,19 +120,24 @@ if __name__ == '__main__':
                             #print('flip decoding succeed')'''
                             break
                             
-                        Idx_Flip = polar.Flip_choice(locals()['PM_'+str(Order)])
-                        #print(j,' ',len(Idx_Flip),end='\n')
+                        Idx_Flip = polar.Flip_choice(PM_tmp)
+                        ##Idx_Flip = polar.Flip_choice(locals()['PM_'+str(Order)])
                         flip_tmp.append(Idx_Flip)
                         j=j+1
                         
                     if((np.any(CRC_flag)==False)):
+
+                        # 處理 flip_tmp
+                        flip_n = np.expand_dims(np.asarray(flip_tmp).flatten(), axis=1)
+
+                        # 重複 Flip_list[Order] 並附加 flip_n
+                        Flip_lists[Order + 1] = np.repeat(Flip_lists[Order], T, axis=0)
+                        Flip_lists[Order + 1] = np.append(Flip_lists[Order + 1], flip_n, axis=1)
+                        '''
                         flip_n = np.expand_dims((np.asarray(flip_tmp)).flatten(), axis=1)
-                        #print(flip_n.shape)
                         locals()['Flip_list'+str(Order+1)] = np.repeat(locals()['Flip_list'+str(Order)], T, axis=0)
-                        #print(locals()['Flip_list'+str(Order+1)].shape)
                         locals()['Flip_list'+str(Order+1)] = np.append(locals()['Flip_list'+str(Order+1)], flip_n, axis=1)
-                        #print(locals()['Flip_list'+str(Order+1)].shape)
-                        
+                        '''
                 err_bit = np.sum(np.not_equal(Y_hat, Y[i]))
                 arr_err = np.not_equal(Y_hat, Y[i])
                 err_frame = np.sum((np.sum(arr_err)).astype(bool, copy=False))
