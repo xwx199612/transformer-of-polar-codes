@@ -227,9 +227,12 @@ class polar_code:
         poly_bits: list of int or NumPy array (CRC polynomial bits)
         return NumPy array representing the CRC syndrome
         """
-        data = np.array(data_bits, dtype=np.int8).copy()
-        #poly = np.array(poly_bits, dtype=np.uint8)
+        data = np.array(data_bits).copy()
         poly = self.CRC_poly.copy()
+        
+        data = data.astype(np.int8)
+        poly = poly.astype(np.int8)
+        
         poly_len = len(poly)
 
         for i in range(len(data) - poly_len + 1):
@@ -415,14 +418,11 @@ class polar_code:
                 numerator += np.exp(-PM_in[j, idx])
                 denominator += np.exp(-PM_in[j+self.List, idx])
             flip_metric[i] = numerator/pow(denominator, self.Alpha)
-        flip_metric_sorted = np.sort(flip_metric[n_l:])
-        
-        #point out the T significant candidates info bit and transform them into polar code index
-        for i in range(self.T_flip):
-            for j in range(len(self.info_set)):
-                if(flip_metric[j] == flip_metric_sorted[i]):
-                    flip_indice.append(self.info_set[j])
-        
+            
+        #point out the T significant candidates info bit and transform them into polar code index    
+        order = np.argsort(flip_metric[n_l:])[:self.T_flip]
+        flip_indice = [ self.info_set[i+n_l] for i in order ]  
+                    
         #flip_array[flip_indice] = 1  #retrun flip candidate in boolyn form length N vector if needed
         
         return flip_indice
