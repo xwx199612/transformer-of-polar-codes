@@ -190,27 +190,27 @@ class polar_code:
         k = m+r
         
         if self.CRC == 4:
-            self.CRC_poly = np.array([1,0,0,1,1])
+            self.CRC_poly = np.array([1,0,0,1,1], dtype=np.int8)
         elif self.CRC == 6:
-            self.CRC_poly = np.array([1,1,0,0,0,0,1])
+            self.CRC_poly = np.array([1,1,0,0,0,0,1], dtype=np.int8)
         elif self.CRC == 8:
-            self.CRC_poly = np.array([1,0,0,0,0,0,1,1,1])
+            self.CRC_poly = np.array([1,0,0,0,0,0,1,1,1], dtype=np.int8)
         elif self.CRC == 11:
-            self.CRC_poly = np.array([1,1,1,0,0,0,1,0,0,0,0,1])
+            self.CRC_poly = np.array([1,1,1,0,0,0,1,0,0,0,0,1], dtype=np.int8)
         elif self.CRC == 16:
-            self.CRC_poly = np.array([1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1])
-            #self.CRC_poly = np.array([1,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,1])
+            self.CRC_poly = np.array([1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1], dtype=np.int8)
+            #self.CRC_poly = np.array([1,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,1], dtype=np.int8)
         elif self.CRC == 24:
-            self.CRC_poly = np.array([1,1,0,1,1,0,0,1,0,1,0,1,1,0,0,0,1,0,0,0,1,0,1,1,1])
+            self.CRC_poly = np.array([1,1,0,1,1,0,0,1,0,1,0,1,1,0,0,0,1,0,0,0,1,0,1,1,1], dtype=np.int8)
         else:
             print("In SelCRCpoly(): CRC", self.CRC, " are not supported!!!")
         
-        G = np.zeros((m, k), dtype=int)
+        G = np.zeros((m, k), dtype=np.int8)
             
         for i in range(m):
             G[i, i] = 1
             # 這裡模擬訊息左移 r 位後做模2除法得到的餘數
-            msg = np.zeros(m + r, dtype=int)
+            msg = np.zeros(m + r, dtype=np.int8)
             msg[i] = 1  # 單位訊號
             # 做mod2除法來模擬CRC餘數
             for j in range(i, i + r + 1):
@@ -227,7 +227,7 @@ class polar_code:
         poly_bits: list of int or NumPy array (CRC polynomial bits)
         return NumPy array representing the CRC syndrome
         """
-        data = np.array(data_bits, dtype=np.uint8).copy()
+        data = np.array(data_bits, dtype=np.int8).copy()
         #poly = np.array(poly_bits, dtype=np.uint8)
         poly = self.CRC_poly.copy()
         poly_len = len(poly)
