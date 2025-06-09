@@ -360,7 +360,7 @@ class polar_code:
             '''
             
             for i in range(self.List):
-                crc_syndrome_list[i] =self.compute_crc_syndrome(extract_info(bit[i, : ,0]))
+                crc_syndrome_list[i] =self.compute_crc_syndrome(self.extract_info(bit[i, : ,0]))
             #find out if there any result pass crc check
             flag = np.sum(crc_syndrome_list[0])
             i=1
@@ -371,25 +371,20 @@ class polar_code:
             pm_order = np.argsort(pm[ : ,-1])
             if(~flag):            
                 for i in range(self.List):
-                    if(~ np.any(crc_syndrome_list[ pm_order[i] ]):
-                        y_hat   = extract_info(bit[ pm_order[i], : ,0])[:self.M]
-                        y_soft  = extract_info(llr[ pm_order[i], : ,0])[:self.M]
+                    if(~ np.any(crc_syndrome_list[ pm_order[i] ])):
+                        y_hat   = self.extract_info(bit[ pm_order[i], : ,0])[:self.M]
+                        y_soft  = self.extract_info(llr[ pm_order[i], : ,0])[:self.M]
                         crc_syndrome = crc_syndrome_list[ pm_order[i] ]
             else:
-                y_hat   = extract_info(bit[ pm_order[0] , : ,0])[:self.M]
-                y_soft  = extract_info(llr[ pm_order[0] , : ,0])[:self.M]
-                crc_syndrome = crc_syndrome_list[ pm_order[0] ]
-                    
-            
-            
+                y_hat   = self.extract_info(bit[ pm_order[0] , : ,0])[:self.M]
+                y_soft  = self.extract_info(llr[ pm_order[0] , : ,0])[:self.M]
+                crc_syndrome = crc_syndrome_list[ pm_order[0] ]                
         else:
             pm_order = np.argsort(pm[ : ,-1])
-            y_hat   = extract_info(bit[ pm_order[0] , : ,0])[:self.M]
-            y_soft  = extract_info(llr[ pm_order[0] , : ,0])[:self.M]
+            y_hat   = self.extract_info(bit[ pm_order[0] , : ,0])[:self.M]
+            y_soft  = self.extract_info(llr[ pm_order[0] , : ,0])[:self.M]
             crc_syndrome = crc_syndrome_list[ pm_order[0] ]
-
-        
-        
+            
         return y_hat, y_soft, pm, crc_syndrome
     def extract_info(self, decoding_result): #input decoding_result(N,) return y_hat(K,)
         return np.matmul(np.ndarray.flatten(decoding_result), self.Permutation)[self.info_set]
