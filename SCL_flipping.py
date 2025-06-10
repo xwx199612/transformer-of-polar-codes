@@ -10,7 +10,8 @@ from functools import lru_cache
 '''
     N = code length
     M = message length
-    K = information length = M + CRC
+    r = CRC
+    K = information length = M + r
     N - K = frozen length
     R = coderate = K/N
     epsilon = cross probability
@@ -360,25 +361,34 @@ class polar_code:
             for i in range(l):
                 flag*=np.any(crc_syndrome_list[i]) #if any decoded result pass crc -> flag =0
             
-            print(f"flag = {flag}")
+            ##print(f"flag = {flag}")
             #pm_order = np.argsort(pm[0:l ,-1])
             pm_order = range(l)
-            if(~flag):            
+            if(flag==0):            
                 for i in range(l):
-                    if(~ np.any(crc_syndrome_list[ pm_order[i] ])):
-                        y_hat   = bit[ pm_order[i], self.Permutation_vec, 0][self.info_set][:self.M]
-                        y_soft  = llr[ pm_order[i], self.Permutation_vec, 0][self.info_set][:self.M]
+                    if(np.any(crc_syndrome_list[ pm_order[i] ])==0):
+                        ##y_hat   = bit[ pm_order[i], self.Permutation_vec, 0][self.info_set][:self.M]
+                        y_hat   = bit[ pm_order[i], self.info_set, 0][self.Permutation_vec[:self.K]][:self.M]
+                        ##y_soft  = llr[ pm_order[i], self.Permutation_vec, 0][self.info_set][:self.M]
+                        y_soft   = llr[ pm_order[i], self.info_set, 0][self.Permutation_vec[:self.K]][:self.M]
                         crc_syndrome = crc_syndrome_list[ pm_order[i] ]
                         break
+                    else:
+                        if(i==(l-1)):
+                            print(f"commit error in crc flag algo")
             else:
-                y_hat   = bit[ pm_order[0], self.Permutation_vec, 0][self.info_set][:self.M]
-                y_soft  = llr[ pm_order[0], self.Permutation_vec, 0][self.info_set][:self.M]
-                crc_syndrome = crc_syndrome_list[ pm_order[0] ]                
+                ##y_hat   = bit[ pm_order[i], self.Permutation_vec, 0][self.info_set][:self.M]
+                y_hat   = bit[ pm_order[0], self.info_set, 0][self.Permutation_vec[:self.K]][:self.M]
+                ##y_soft  = llr[ pm_order[i], self.Permutation_vec, 0][self.info_set][:self.M]
+                y_soft   = llr[ pm_order[0], self.info_set, 0][self.Permutation_vec[:self.K]][:self.M]
+                crc_syndrome = crc_syndrome_list[ pm_order[0] ]
         else:
             pm_order = np.argsort(pm[ : ,-1])
-            y_hat   = bit[ pm_order[0], self.Permutation_vec, 0][self.info_set][:self.M]
-            y_soft  = llr[ pm_order[0], self.Permutation_vec, 0][self.info_set][:self.M]
-            crc_syndrome = crc_syndrome_list[ pm_order[0] ] 
+            ##y_hat   = bit[ pm_order[i], self.Permutation_vec, 0][self.info_set][:self.M]
+            y_hat   = bit[ pm_order[0], self.info_set, 0][self.Permutation_vec[:self.K]][:self.M]
+            ##y_soft  = llr[ pm_order[i], self.Permutation_vec, 0][self.info_set][:self.M]
+            y_soft   = llr[ pm_order[0], self.info_set, 0][self.Permutation_vec[:self.K]][:self.M]
+            crc_syndrome = crc_syndrome_list[ pm_order[0] ]
             
         return y_hat, y_soft, pm, crc_syndrome
 
@@ -534,3 +544,4 @@ if __name__ == '__main__':
     f1.write(str(SNR_in_db)+"\n")
     f1.write(str(total_fer)+"\n")
 '''
+    
