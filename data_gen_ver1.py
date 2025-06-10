@@ -16,7 +16,7 @@ if __name__ == '__main__':
     R = 0.5
     M = int(N*R)
     CRC_bits = 16
-    List = 4
+    List = 1
     T = 20
     O = 1
     Alpha = 1.2
@@ -55,8 +55,9 @@ if __name__ == '__main__':
                 x=X[i]
                 y=Y[i]
                 
-                Y_hat, Y_soft_0, PM_0, CRC_syndrome = polar.SCL_decoder(x, Flip_func, []) # first SCL with null flip array and Flip_func set to 0
+                Y_hat, Y_soft_0, PM, CRC_syndrome = polar.SCL_decoder(x, Flip_func, []) # first SCL with null flip array and Flip_func set to 0
                 Y_0 = Y_hat.copy()
+                PM_0 = PM.copy()
                 CRC_syndrome_0 = CRC_syndrome.copy()
                 
                 # 初始化字典以儲存 Flip_list
@@ -74,22 +75,25 @@ if __name__ == '__main__':
                         Y_hat = Y_0
                         ##print('flip decoding fail')
                         #collect failure flipping result
+                        '''
                         flip_arr = np.zeros(N, dtype=np.uint8)
                         flip_arr[:] = -1                #set to -1 means we doesn't find out correct flip arr 
                         x_all.append(X[i])
                         y_all.append(Y_0)
                         y_soft_all.append(Y_soft_0)
                         pm_all.append(PM_0)
-                        crc_sydrome_all.append(CRC_Syndrom_0)
+                        crc_sydrome_all.append(CRC_syndrome_0)
                         flip_arr_all.append(flip_arr)
                         flip_bool_all.append(0)
                         
+                        num_data += 1
+                        '''
                         break 
                         
                     j=0
                     while(j<pow(T,Order)):
                         
-                        Y_hat, Y_soft, PM_tmp, CRC_syndrome = polar.SCL_decoder(x, Flip_func, Flip_lists[Order][j])
+                        Y_hat, Y_soft, PM, CRC_syndrome = polar.SCL_decoder(x, Flip_func, Flip_lists[Order][j])
                         if(np.any(CRC_syndrome)==False): #syndrome are all zeros                    
                             #collect successful flip result
                             flip_arr= np.zeros(N, dtype=np.uint8)
@@ -99,12 +103,15 @@ if __name__ == '__main__':
                             y_all.append(Y_0)
                             y_soft_all.append(Y_soft_0)
                             pm_all.append(PM_0)
-                            crc_sydrome_all.append(CRC_Syndrom_0)
+                            crc_sydrome_all.append(CRC_syndrome_0)
                             flip_arr_all.append(flip_arr)
                             flip_bool_all.append(1)
+                            
+                            num_data += 1
+                            ##print('flip decoding succeed')
                             break
                             
-                        Idx_Flip = polar.Flip_choice(PM_tmp) #list(T,)
+                        Idx_Flip = polar.Flip_choice(PM) #list(T,)
                         flip_tmp.append(Idx_Flip) #flip_tmp(T,T)
                         j=j+1
                         
