@@ -22,6 +22,17 @@ def f_func(L1, L2):
     
 def g_func(L1, L2, B1):
     return (L1+(np.power(-1, B1))*L2)
+    
+def bit_reverse(n, bits):
+    """
+    將整數 n 進行 bit-reversal，bits 是總位元數（例如 N=8 時 bits=3）
+    例如 bit_reverse(3, 3) = 6, 因為 3: 011 -> 110: 6
+    """
+    reversed_n = 0
+    for i in range(bits):
+        if n & (1 << i):
+            reversed_n |= 1 << (bits - 1 - i)
+    return reversed_n
 
 class polar_code:
     def __init__(self, cross_p, N, R, CRC, List, O, T_flip, Alpha):
@@ -127,11 +138,15 @@ class polar_code:
             print("info size is wrong")
             
     def Generator_Polar(self):
+        '''
         #permutation_matrix
-        self.Permutation = np.zeros((self.N,self.N))
+        self.Permutation_mat = np.zeros((self.N,self.N))
         for i in range(self.N):
             i_reversal = int(bin(i)[2:].zfill(self.n)[::-1], 2)
-            self.Permutation[i, i_reversal] = 1
+            self.Permutation_mat[i, i_reversal] = 1
+        '''
+        #permutation_vector
+        self.Permutation_vec = [bit_reverse(i, self.n) for i in range(self.N)]
         #F_N    
         F_2 = np.array([[1,0],
                         [1,1]])
@@ -139,7 +154,8 @@ class polar_code:
         for i in range(self.n):
             self.F_N = np.kron(self.F_N, F_2)            
             
-        self.G_Polar = np.matmul(self.F_N , self.Permutation)
+        #self.G_Polar = np.matmul(self.Permutation_mat, self.F_N)
+        self.G_Polar = self.F_N[self.Permutation_vec, :]
 
     def crc_generator_matrix(self):
         #K is message length == N_message
