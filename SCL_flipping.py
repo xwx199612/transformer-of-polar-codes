@@ -261,7 +261,6 @@ class polar_code:
         bit = np.zeros((2*self.List, self.N, self.n+1), dtype=np.int8)
         pm = np.zeros((2*self.List, self.N), dtype=np.float32)
         crc_syndrome_list = np.zeros((self.List, self.CRC), dtype=np.int8)
-        bit_cand = np.zeros((2*self.List,), dtype=np.int8)
         
         llr[0, :, self.n] = x
         
@@ -352,41 +351,20 @@ class polar_code:
         #Bits ends
     #codeword decision done by CRC in order of PM
                
-        if(self.CRC>0): #CRC check
-            '''
-            i = 0
-            flag = 1 #preset
-            
-            while(i<self.List):                
-                crc_syndrome_list[i] = self.compute_crc_syndrome(np.matmul(np.ndarray.flatten(bit[i, :, 0]), self.Permutation)[self.info_set])
-                
-                if(~ np.any(crc_syndrome_list[i])):
-                    y_hat   = (np.matmul(np.ndarray.flatten(bit[i, :, 0]), self.Permutation)[self.info_set])[:self.M]
-                    y_soft  = (np.matmul(np.ndarray.flatten(llr[i, :, 0]), self.Permutation)[self.info_set])[:self.M]
-                    crc_syndrome = crc_syndrome_list[i]
-                    flag = 0            #flag = np.any(crc_syndrome)
-                    break
-                    
-                else: i = i + 1
-                
-            if(flag):   #all crc_syndromes are nonzero
-                y_hat   = (np.matmul(np.ndarray.flatten(bit[0, :, 0]), self.Permutation)[self.info_set])[:self.M]
-                y_soft  = (np.matmul(np.ndarray.flatten(llr[0, :, 0]), self.Permutation)[self.info_set])[:self.M]
-                crc_syndrome = crc_syndrome_list[0]
-            '''
-            
-            for i in range(self.List):
+        if(self.CRC>0): #CRC check            
+            for i in range(l):
                 crc_syndrome_list[i] =self.compute_crc_syndrome(bit[i, self.Permutation_vec, 0][self.info_set])
             #find out if there any result pass crc check
             flag = np.sum(crc_syndrome_list[0])
             i=1
-            while(i<self.List):
+            while(i<l):
                 flag*=np.sum(crc_syndrome_list[i])
                 i+=1
                 
-            pm_order = np.argsort(pm[ : ,-1])
+            #pm_order = np.argsort(pm[0:l ,-1])
+            pm_order = range(l)
             if(~flag):            
-                for i in range(self.List):
+                for i in range(l):
                     if(~ np.any(crc_syndrome_list[ pm_order[i] ])):
                         y_hat   = bit[ pm_order[i], self.Permutation_vec, 0][self.info_set][:self.M]
                         y_soft  = llr[ pm_order[i], self.Permutation_vec, 0][self.info_set][:self.M]
@@ -394,12 +372,12 @@ class polar_code:
                         break
             else:
                 y_hat   = bit[ pm_order[0], self.Permutation_vec, 0][self.info_set][:self.M]
-                y_soft  = bit[ pm_order[0], self.Permutation_vec, 0][self.info_set][:self.M]
+                y_soft  = llr[ pm_order[0], self.Permutation_vec, 0][self.info_set][:self.M]
                 crc_syndrome = crc_syndrome_list[ pm_order[0] ]                
         else:
             pm_order = np.argsort(pm[ : ,-1])
             y_hat   = bit[ pm_order[0], self.Permutation_vec, 0][self.info_set][:self.M]
-            y_soft  = bit[ pm_order[0], self.Permutation_vec, 0][self.info_set][:self.M]
+            y_soft  = llr[ pm_order[0], self.Permutation_vec, 0][self.info_set][:self.M]
             crc_syndrome = crc_syndrome_list[ pm_order[0] ] 
             
         return y_hat, y_soft, pm, crc_syndrome
