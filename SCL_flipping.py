@@ -355,12 +355,12 @@ class polar_code:
             for i in range(l):
                 crc_syndrome_list[i] =self.compute_crc_syndrome(bit[i, self.Permutation_vec, 0][self.info_set])
             #find out if there any result pass crc check
-            flag = np.sum(crc_syndrome_list[0])
-            i=1
-            while(i<l):
-                flag*=np.sum(crc_syndrome_list[i])
-                i+=1
-                
+            flag = 1
+            i=0
+            for i in range(l):
+                flag*=np.any(crc_syndrome_list[i]) #if any decoded result pass crc -> flag =0
+            
+            print(f"flag = {flag}")
             #pm_order = np.argsort(pm[0:l ,-1])
             pm_order = range(l)
             if(~flag):            
@@ -534,4 +534,3 @@ if __name__ == '__main__':
     f1.write(str(SNR_in_db)+"\n")
     f1.write(str(total_fer)+"\n")
 '''
-    
