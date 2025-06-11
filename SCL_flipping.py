@@ -253,17 +253,17 @@ class polar_code:
         
         noise = np.random.normal(scale= std_noise, size= codeword_bpsk.shape)
         x = codeword_bpsk + noise
-        x = 2*x / (std_noise**2)
+        llr = 2*x / (std_noise**2)
         y = message_batch
-        return x, y
+        return llr, y
         
-    def SCL_decoder(self, x, flip_func, flip_arr):
+    def SCL_decoder(self, LLR, flip_func, flip_arr):
         llr = np.zeros((2*self.List, self.N, self.n+1), dtype=np.float32)
         bit = np.zeros((2*self.List, self.N, self.n+1), dtype=np.int8)
         pm = np.zeros((2*self.List, self.N), dtype=np.float32)
         crc_syndrome_list = np.zeros((self.List, self.CRC), dtype=np.int8)
         
-        llr[0, :, self.n] = x
+        llr[0, :, self.n] = LLR
         
         l = 1
         
@@ -367,27 +367,47 @@ class polar_code:
             if(flag==0):            
                 for i in range(l):
                     if(np.any(crc_syndrome_list[ pm_order[i] ])==0):
-                        ##y_hat   = bit[ pm_order[i], self.Permutation_vec, 0][self.info_set][:self.M]
-                        y_hat   = bit[ pm_order[i], self.info_set, 0][self.Permutation_vec[:self.K]][:self.M]
-                        ##y_soft  = llr[ pm_order[i], self.Permutation_vec, 0][self.info_set][:self.M]
-                        y_soft   = llr[ pm_order[i], self.info_set, 0][self.Permutation_vec[:self.K]][:self.M]
+                        
+                        decoded = bit[pm_order[i], :, 0]            # shape (N,)
+                        decoded = decoded[self.Permutation_vec]     # bit-reversal 排序
+                        info_bits = decoded[self.info_set]          # 取出 info set 的 K bits
+                        y_hat = info_bits[:self.M]                  # 最前面的 M bits 為 message bits
+                        
+                        decoded = llr[pm_order[i], :, 0]            # shape (N,)
+                        decoded = decoded[self.Permutation_vec]     # bit-reversal 排序
+                        info_bits = decoded[self.info_set]          # 取出 info set 的 K bits
+                        y_soft = info_bits[:self.M]                 # 最前面的 M bits 為 message bits
+                        
                         crc_syndrome = crc_syndrome_list[ pm_order[i] ]
                         break
                     else:
                         if(i==(l-1)):
                             print(f"commit error in crc flag algo")
             else:
-                ##y_hat   = bit[ pm_order[i], self.Permutation_vec, 0][self.info_set][:self.M]
-                y_hat   = bit[ pm_order[0], self.info_set, 0][self.Permutation_vec[:self.K]][:self.M]
-                ##y_soft  = llr[ pm_order[i], self.Permutation_vec, 0][self.info_set][:self.M]
-                y_soft   = llr[ pm_order[0], self.info_set, 0][self.Permutation_vec[:self.K]][:self.M]
+                decoded = bit[pm_order[0], :, 0]            # shape (N,)
+                decoded = decoded[self.Permutation_vec]     # bit-reversal 排序
+                info_bits = decoded[self.info_set]          # 取出 info set 的 K bits
+                y_hat = info_bits[:self.M]                  # 最前面的 M bits 為 message bits
+                
+                decoded = llr[pm_order[0], :, 0]            # shape (N,)
+                decoded = decoded[self.Permutation_vec]     # bit-reversal 排序
+                info_bits = decoded[self.info_set]          # 取出 info set 的 K bits
+                y_soft = info_bits[:self.M]                 # 最前面的 M bits 為 message bits
+                
                 crc_syndrome = crc_syndrome_list[ pm_order[0] ]
         else:
             pm_order = np.argsort(pm[ : ,-1])
-            ##y_hat   = bit[ pm_order[i], self.Permutation_vec, 0][self.info_set][:self.M]
-            y_hat   = bit[ pm_order[0], self.info_set, 0][self.Permutation_vec[:self.K]][:self.M]
-            ##y_soft  = llr[ pm_order[i], self.Permutation_vec, 0][self.info_set][:self.M]
-            y_soft   = llr[ pm_order[0], self.info_set, 0][self.Permutation_vec[:self.K]][:self.M]
+            
+            decoded = bit[pm_order[0], :, 0]            # shape (N,)
+            decoded = decoded[self.Permutation_vec]     # bit-reversal 排序
+            info_bits = decoded[self.info_set]          # 取出 info set 的 K bits
+            y_hat = info_bits[:self.M]                  # 最前面的 M bits 為 message bits
+            
+            decoded = llr[pm_order[0], :, 0]            # shape (N,)
+            decoded = decoded[self.Permutation_vec]     # bit-reversal 排序
+            info_bits = decoded[self.info_set]          # 取出 info set 的 K bits
+            y_soft = info_bits[:self.M]                 # 最前面的 M bits 為 message bits
+            
             crc_syndrome = crc_syndrome_list[ pm_order[0] ]
             
         return y_hat, y_soft, pm, crc_syndrome
