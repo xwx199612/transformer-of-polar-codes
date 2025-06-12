@@ -125,9 +125,8 @@ if __name__ == '__main__':
                         Flip_lists[Order+1] = np.repeat(Flip_lists[Order], T, axis=0)
                         Flip_lists[Order+1] = np.append(Flip_lists[Order+1], flip_n, axis=1)
                 
-                err_bit = np.sum(np.not_equal(Y_hat, Y[i]))
-                arr_err = np.not_equal(Y_hat, Y[i])
-                err_frame = np.sum((np.sum(arr_err)).astype(bool, copy=False))
+                err_bit = np.sum(Y_hat != Y[i])
+                err_frame = int(np.any(Y_hat != Y[i]))
                 #print(err_frame)
                 total_err_bit[s] += err_bit
                 total_err_frame[s] += err_frame
