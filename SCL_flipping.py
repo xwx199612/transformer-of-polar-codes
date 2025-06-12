@@ -49,9 +49,9 @@ class polar_code:
         self.T_flip = int(T_flip)
         self.Alpha = Alpha
         
-        #self.cal_bha()
-        #self.Info_Bha()
-        self.InfoBitSelectPW()
+        self.cal_bha()
+        self.Info_Bha()
+        #self.InfoBitSelectPW()
         self.Generator_Polar()
         self.crc_generator_matrix()
         self.book()
@@ -586,4 +586,3 @@ if __name__ == '__main__':
     f1.write(str(total_fer)+"\n")
 '''
     
-
