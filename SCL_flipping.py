@@ -383,8 +383,8 @@ class polar_code:
                 flag*=np.any(crc_syndrome_list[i]) #if any decoded result pass crc -> flag =0
             
             ##print(f"flag = {flag}")
-            #pm_order = np.argsort(pm[0:l ,-1])
-            pm_order = range(l)
+            pm_order = np.argsort(pm[0:l ,-1])
+            #pm_order = range(l)
             if(flag==0):            
                 for i in range(l):
                     if(np.any(crc_syndrome_list[ pm_order[i] ])==0):
