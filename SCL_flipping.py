@@ -307,10 +307,10 @@ class polar_code:
                 pm[l:(2*l), dec_bit] = pm[0:l, dec_bit] + np.abs(llr[0:l, dec_bit_r,0])
                 
                 if((2*l) > self.List):
-                    pm_tmp = np.copy(pm)
-                    idx_pm_sort = np.argsort(pm[0:(2*l), dec_bit])
-                    reserved_path = idx_pm_sort[0:l]
-                    deleted_path = idx_pm_sort[l:(2*l)]
+                    pm_tmp = pm[:(2*l), :].copy()
+                    idx_pm_sort = np.argsort(pm_tmp[:(2*l), dec_bit])
+                    reserved_path = idx_pm_sort[:l]
+                    deleted_path = idx_pm_sort[l:]
                     
                     bit_tmp = np.copy(bit[:, :, :])
                     llr_tmp = np.copy(llr[:, :, :])
@@ -327,16 +327,16 @@ class polar_code:
                     print(reserved_path)
                     print(deleted_path)
                     input("Press Enter to continue...")
-                    '''
-                    for i,idx in enumerate(path):
-                        pm[i, :] = pm_tmp[idx, :]
-                        bit[i, :, :] = bit_tmp[idx, :, :]
-                        llr[i, :, :] = llr_tmp[idx, :, :]
+                    '''                       
+                    # get chosen path
+                    pm[:l, :]   = pm_tmp[path, :]   
+                    bit[:l, :, :] = bit_tmp[path, :, :]
+                    llr[:l, :, :] = llr_tmp[path, :, :]                      
 
                 else:
                     #bit[l:(2*l), :, :] = bit[0:l, :, :]
                     #llr[l:(2*l), :, :] = llr[0:l, :, :]                    
-                    l = l*2
+                    l=min(2*l, self.List)
             #frozen bits
             else: 
                 pm[0:l, dec_bit] = pm[0:l, dec_bit-1]
@@ -351,10 +351,10 @@ class polar_code:
                 pm_tmp = np.copy(pm)
                 idx_pm_sort = np.argsort(pm[0:l, dec_bit])
                 
-                for i in range(l):
-                    pm[i, :] = pm_tmp[idx_pm_sort[i], :]
-                    bit[i, :, :] = bit_tmp[idx_pm_sort[i], :, :]
-                    llr[i, :, :] = llr_tmp[idx_pm_sort[i], :, :]
+            
+                pm[:l, :] = pm_tmp[idx_pm_sort, :]
+                bit[:l, :, :] = bit_tmp[idx_pm_sort, :, :]
+                llr[:l, :, :] = llr_tmp[idx_pm_sort, :, :]
             
         #path expansion & Bit decision end    
         #Bits(the depth of Bits is the next LLRs' depth - 1)
@@ -369,7 +369,7 @@ class polar_code:
                         bit[:, dec_bit_r - (2*j)*pow(2,self.n-i), i] = bit[:, dec_bit_r - (2*j)*pow(2,self.n-i), i-1]
         #Bits ends
     #codeword decision done by CRC in order of PM
-        '''
+        
         print(pm[0:l,64])
         print(pm[0:l,65]) 
         print(pm[0:l,66])
@@ -379,7 +379,7 @@ class polar_code:
         print(pm[0:l,-2])
         print(pm[0:l,-1])
         input("Press Enter to continue...")
-        '''
+        
         if(self.CRC>0): #CRC check            
             for i in range(l):
                 crc_syndrome_list[i] =self.compute_crc_syndrome(bit[i, self.Permutation_vec, 0][self.info_set])
