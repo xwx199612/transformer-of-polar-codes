@@ -370,15 +370,8 @@ class polar_code:
         #Bits ends
     #codeword decision done by CRC in order of PM
         
-        print(pm[0:l,64])
-        print(pm[0:l,65]) 
-        print(pm[0:l,66])
-        print(pm[0:l,67])
-        print(pm[0:l,-4])
-        print(pm[0:l,-3]) 
-        print(pm[0:l,-2])
-        print(pm[0:l,-1])
-        input("Press Enter to continue...")
+        ##print(pm[0:l,-1])
+        ##input("Press Enter to continue...")
         
         if(self.CRC>0): #CRC check            
             for i in range(l):
@@ -593,3 +586,4 @@ if __name__ == '__main__':
     f1.write(str(total_fer)+"\n")
 '''
     
+
