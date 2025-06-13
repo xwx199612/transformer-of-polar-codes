@@ -252,6 +252,7 @@ class polar_code:
         codeword_bpsk = 1 - (2*codeword_polar)
         
         noise = np.random.normal(scale= std_noise, size= codeword_bpsk.shape)
+        #noise = 0
         x = codeword_bpsk + noise
         llr = 2*x / (std_noise**2)
         y = message_batch
