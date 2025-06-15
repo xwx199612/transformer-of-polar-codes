@@ -1,0 +1,607 @@
+import numpy as np
+import time
+import matplotlib.pyplot as plt
+import pdb
+
+time_duration = 1
+## SCL decoding in this python file ##
+from functools import lru_cache
+
+'''
+    N = code length
+    M = message length
+    r = CRC
+    K = information length = M + r
+    N - K = frozen length
+    R = coderate = K/N
+    epsilon = cross probability
+'''
+@lru_cache(maxsize=None)
+
+def f_func(L1, L2):
+    return np.sign(L1)*np.sign(L2)*np.minimum(np.abs(L1),np.abs(L2))
+
+def g_func(L1, L2, B1):
+    return (L1+(np.power(-1, B1))*L2)
+
+def bit_reverse(n, bits):
+    """
+    將整數 n 進行 bit-reversal，bits 是總位元數（例如 N=8 時 bits=3）
+    例如 bit_reverse(3, 3) = 6, 因為 3: 011 -> 110: 6
+    """
+    reversed_n = 0
+    for i in range(bits):
+        if n & (1 << i):
+            reversed_n |= 1 << (bits - 1 - i)
+    return reversed_n
+
+class polar_code:
+    def __init__(self, cross_p, N, R, CRC, List, O, T_flip, Alpha):
+        self.cross_p = cross_p
+        self.N = int(N)
+        self.n = int(np.log2(self.N))
+        self.R = R
+        self.M = int(np.ceil(N*R))
+        self.CRC = int(CRC)
+        self.K = int(self.M + self.CRC)
+        self.List = int(List)
+        self.Order = int(O)
+        self.T_flip = int(T_flip)
+        self.Alpha = Alpha
+
+        self.cal_bha()
+        self.Info_Bha()
+        #self.InfoBitSelectPW()
+        self.Generator_Polar()
+        if(self.CRC>0):
+            self.crc_generator_matrix()
+        self.book()
+
+
+    def cal_bha(self):
+        self.bha_list = np.ones(self.N)*self.cross_p
+        for i in range(self.N):
+            bha_weight = np.zeros(self.n)
+            tmp = i
+            for j in range(self.n):
+                bha_weight[j] = tmp % 2
+                tmp = tmp >> 1
+            for j in range(self.n):
+                bha_tmp = self.bha_list[i]
+                if bha_weight[(self.n-1) - j] == 1:
+                    self.bha_list[i] = pow(bha_tmp, 2)
+                else:
+                    self.bha_list[i] = 2*bha_tmp - pow(bha_tmp, 2)
+
+    def Info_Bha(self):
+        sort = []
+        self.frozen_set = []
+        for i in range(self.N):
+            sort.append(self.bha_list[i])
+
+        sort = np.array(sort)
+        sort = np.sort(sort, axis=0)
+        threshold = sort[int(self.K - 1)]
+        for i in range(self.N):
+            if(self.bha_list[i]>threshold):
+                self.frozen_set.append(i)
+        self.info_set = [i for i in range(self.N) if i not in self.frozen_set]
+
+    def InfoBitSelectPW(self):
+        if self.N == 1024:
+            pw_order_array = np.array([0	,1	,2	,4	,8	,16	,32	,3	,5	,64	,9	,6	,17	,10	,18	,128	,12	,33	,65	,20	,256	,34	,24	,36	,7	,129	,66	,512	,11	,40	,68	,130	,19	,13	,48	,14	,72	,257	,21	,132	,35	,258	,26	,513	,80	,37	,25	,22	,136	,260	,264	,38	,514	,96	,67	,41	,144	,28	,69	,42	,516	,49	,74	,272	,160	,520	,288	,528	,192	,544	,70	,44	,131	,81	,50	,73	,15	,320	,133	,52	,23	,134	,384	,76	,137	,82	,56	,27	,97	,39	,259	,84	,138	,145	,261	,29	,43	,98	,515	,88	,140	,30	,146	,71	,262	,265	,161	,576	,45	,100	,640	,51	,148	,46	,75	,266	,273	,517	,104	,162	,53	,193	,152	,77	,164	,768	,268	,274,518	,54	,83	,57	,521	,112	,135	,78	,289	,194	,85	,276	,522	,58	,168	,139	,99	,86	,60	,280	,89	,290	,529	,524	,196	,141	,101	,147	,176	,142	,530	,321	,31	,200	,90	,545	,292	,322	,532	,263	,149	,102	,105	,304	,296	,163	,92	,47	,267	,385	,546	,324	,208	,386	,150	,153	,165	,106	,55	,328	,536	,577	,548	,113	,154	,79	,269	,108	,578	,224	,166	,519	,552	,195	,270	,641	,523	,275	,580	,291	,59	,169	,560	,114	,277	,156	,87	,197	,116	,170	,61	,531	,525	,642	,281	,278	,526	,177	,293	,388	,91	,584	,769	,198	,172	,120	,201	,336	,62	,282	,143	,103	,178	,294	,93	,644	,202	,592	,323	,392	,297	,770	,107	,180	,151	,209	,284	,648,94	,204	,298	,400	,608	,352	,325	,533	,155	,210	,305	,547	,300	,109	,184	,534	,537	,115	,167	,225	,326	,306	,772	,157	,656	,329	,110	,117	,212	,171	,776	,330	,226	,549	,538	,387	,308	,216	,416	,271	,279	,158	,337	,550	,672	,118	,332	,579	,540	,389	,173	,121	,553	,199	,784	,179	,228	,338	,312	,704	,390	,174	,554	,581	,393	,283	,122	,448	,353	,561	,203	,63	,340	,394	,527	,582	,556	,181	,295	,285	,232	,124	,205	,182	,643	,562	,286	,585	,299	,354	,211	,401	,185	,396	,344	,586	,645	,593	,535	,240	,206	,95	,327	,564	,800	,402	,356	,307	,301	,417	,213	,568	,832	,588	,186	,646	,404	,227	,896	,594	,418	,302	,649	,771	,360	,539	,111	,331,214	,309	,188	,449	,217	,408	,609	,596	,551	,650	,229	,159	,420	,310	,541	,773	,610	,657	,333	,119	,600	,339	,218	,368	,652	,230	,391	,313	,450	,542	,334	,233	,555	,774	,175	,123	,658	,612	,341	,777	,220	,314	,424	,395	,673	,583	,355	,287	,183	,234	,125	,557	,660	,616	,342	,316	,241	,778	,563	,345	,452	,397	,403	,207	,674	,558	,785	,432	,357	,187	,236	,664	,624	,587	,780	,705	,126	,242	,565	,398	,346	,456	,358	,405	,303	,569	,244	,595	,189	,566	,676	,361	,706	,589	,215	,786	,647	,348	,419	,406	,464	,680	,801	,362	,590	,409	,570	,788	,597	,572	,219	,311	,708	,598	,601	,651	,421	,792	,802	,611	,602	,410	,231	,688	,653	,248	,369	,190,364	,654	,659	,335	,480	,315	,221	,370	,613	,422	,425	,451	,614	,543	,235	,412	,343	,372	,775	,317	,222	,426	,453	,237	,559	,833	,804	,712	,834	,661	,808	,779	,617	,604	,433	,720	,816	,836	,347	,897	,243	,662	,454	,318	,675	,618	,898	,781	,376	,428	,665	,736	,567	,840	,625	,238	,359	,457	,399	,787	,591	,678	,434	,677	,349	,245	,458	,666	,620	,363	,127	,191	,782	,407	,436	,626	,571	,465	,681	,246	,707	,350	,599	,668	,790	,460	,249	,682	,573	,411	,803	,789	,709	,365	,440	,628	,689	,374	,423	,466	,793	,250	,371	,481	,574	,413	,603	,366	,468	,655	,900	,805	,615	,684	,710	,429	,794	,252	,373	,605	,848	,690	,713	,632	,482	,806	,427	,904,414	,223	,663	,692	,835	,619	,472	,455	,796	,809	,714	,721	,837	,716	,864	,810	,606	,912	,722	,696	,377	,435	,817	,319	,621	,812	,484	,430	,838	,667	,488	,239	,378	,459	,622	,627	,437	,380	,818	,461	,496	,669	,679	,724	,841	,629	,351	,467	,438	,737	,251	,462	,442	,441	,469	,247	,683	,842	,738	,899	,670	,783	,849	,820	,728	,928	,791	,367	,901	,630	,685	,844	,633	,711	,253	,691	,824	,902	,686	,740	,850	,375	,444	,470	,483	,415	,485	,905	,795	,473	,634	,744	,852	,960	,865	,693	,797	,906	,715	,807	,474	,636	,694	,254	,717	,575	,913	,798	,811	,379	,697	,431	,607	,489	,866	,723	,486	,908	,718	,813	,476	,856	,839	,725	,698	,914	,752	,868,819	,814	,439	,929	,490	,623	,671	,739	,916	,463	,843	,381	,497	,930	,821	,726	,961	,872	,492	,631	,729	,700	,443	,741	,845	,920	,382	,822	,851	,730	,498	,880	,742	,445	,471	,635	,932	,687	,903	,825	,500	,846	,745	,826	,732	,446	,962	,936	,475	,853	,867	,637	,907	,487	,695	,746	,828	,753	,854	,857	,504	,799	,255	,964	,909	,719	,477	,915	,638	,748	,944	,869	,491	,699	,754	,858	,478	,968	,383	,910	,815	,976	,870	,917	,727	,493	,873	,701	,931	,756	,860	,499	,731	,823	,922	,874	,918	,502	,933	,743	,760	,881	,494	,702	,921	,501	,876	,847	,992	,447	,733	,827	,934	,882	,937	,963	,747	,505	,855	,924	,734	,829	,965	,938	,884	,506	,749	,945,966	,755	,859	,940	,830	,911	,871	,639	,888	,479	,946	,750	,969	,508	,861	,757	,970	,919	,875	,862	,758	,948	,977	,923	,972	,761	,877	,952	,495	,703	,935	,978	,883	,762	,503	,925	,878	,735	,993	,885	,939	,994	,980	,926	,764	,941	,967	,886	,831	,947	,507	,889	,984	,751	,942	,996	,971	,890	,509	,949	,973	,1000	,892	,950	,863	,759	,1008	,510	,979	,953	,763	,974	,954	,879	,981	,982	,927	,995	,765	,956	,887	,985	,997	,986	,943	,891	,998	,766	,511	,988	,1001	,951	,1002	,893	,975	,894	,1009	,955	,1004	,1010	,957	,983	,958	,987	,1012	,999	,1016	,767	,989	,1003	,990	,1005	,959	,1011	,1013	,895	,1006	,1014	,1017	,1018	,991	,1020	,1007	,1015	,1019	,1021	,1022	,1023])
+        elif self.N == 512:
+            pw_order_array = np.array([0	,1	,2	,4	,8	,16	,32	,3	,5	,64	,9	,6	,17	,10	,18	,128	,12	,33	,65	,20	,256	,34	,24	,36	,7	,129	,66	,11	,40	,68	,130	,19	,13	,48	,14	,72	,257	,21	,132	,35	,258	,26	,80	,37	,25	,22	,136	,260	,264	,38	,96	,67	,41	,144	,28	,69	,42	,49	,74	,272	,160	,288	,192	,70	,44	,131	,81	,50	,73	,15	,320	,133	,52	,23	,134	,384	,76	,137	,82	,56	,27	,97	,39	,259	,84	,138	,145	,261	,29	,43	,98	,88	,140	,30	,146	,71	,262	,265	,161	,45	,100	,51	,148	,46	,75	,266	,273	,104	,162	,53	,193	,152	,77	,164	,268	,274	,54	,83	,57	,112	,135	,78	,289	,194	,85	,276	,58	,168,139	,99	,86	,60	,280	,89	,290	,196	,141	,101	,147	,176	,142	,321	,31	,200	,90	,292	,322	,263	,149	,102	,105	,304	,296	,163	,92	,47	,267	,385	,324	,208	,386	,150	,153	,165	,106	,55	,328	,113	,154	,79	,269	,108	,224	,166	,195	,270	,275	,291	,59	,169	,114	,277	,156	,87	,197	,116	,170	,61	,281	,278	,177	,293	,388	,91	,198	,172	,120	,201	,336	,62	,282	,143	,103	,178	,294	,93	,202	,323	,392	,297	,107	,180	,151	,209	,284	,94	,204	,298	,400	,352	,325	,155	,210	,305	,300	,109	,184	,115	,167	,225	,326	,306	,157	,329	,110	,117	,212	,171	,330	,226	,387	,308	,216	,416	,271	,279	,158	,337	,118	,332	,389	,173	,121	,199	,179	,228,338	,312	,390	,174	,393	,283	,122	,448	,353	,203	,63	,340	,394	,181	,295	,285	,232	,124	,205	,182	,286	,299	,354	,211	,401	,185	,396	,344	,240	,206	,95	,327	,402	,356	,307	,301	,417	,213	,186	,404	,227	,418	,302	,360	,111	,331	,214	,309	,188	,449	,217	,408	,229	,159	,420	,310	,333	,119	,339	,218	,368	,230	,391	,313	,450	,334	,233	,175	,123	,341	,220	,314	,424	,395	,355	,287	,183	,234	,125	,342	,316	,241	,345	,452	,397	,403	,207	,432	,357	,187	,236	,126	,242	,398	,346	,456	,358	,405	,303	,244	,189	,361	,215	,348	,419	,406	,464	,362	,409	,219	,311	,421	,410	,231	,248	,369	,190	,364	,335	,480	,315	,221	,370	,422	,425	,451	,235	,412,343	,372	,317	,222	,426	,453	,237	,433	,347	,243	,454	,318	,376	,428	,238	,359	,457	,399	,434	,349	,245	,458	,363	,127	,191	,407	,436	,465	,246	,350	,460	,249	,411	,365	,440	,374	,423	,466	,250	,371	,481	,413	,366	,468	,429	,252	,373	,482	,427	,414	,223	,472	,455	,377	,435	,319	,484	,430	,488	,239	,378	,459	,437	,380	,461	,496	,351	,467	,438	,251	,462	,442	,441	,469	,247	,367	,253	,375	,444	,470	,483	,415	,485	,473	,474	,254	,379	,431	,489	,486	,476	,439	,490	,463	,381	,497	,492	,443	,382	,498	,445	,471	,500	,446	,475	,487	,504	,255	,477	,491	,478	,383	,493	,499	,502	,494	,501	,447	,505	,506	,479	,508	,495	,503	,507	,509	,510	,511])
+        elif self.N == 256:
+            pw_order_array = np.array([0	,1	,2	,4	,8	,16	,32	,3	,5	,64	,9	,6	,17	,10	,18	,128	,12	,33	,65	,20	,34	,24	,36	,7	,129	,66	,11	,40	,68	,130	,19	,13	,48	,14	,72	,21	,132	,35	,26	,80	,37	,25	,22	,136	,38	,96	,67	,41	,144	,28	,69	,42	,49	,74	,160	,192	,70	,44	,131	,81	,50	,73	,15	,133	,52	,23	,134	,76	,137	,82	,56	,27	,97	,39	,84	,138	,145	,29	,43	,98	,88	,140	,30	,146	,71	,161	,45	,100	,51	,148	,46	,75	,104	,162	,53	,193	,152	,77	,164	,54	,83	,57	,112	,135	,78	,194	,85	,58	,168	,139	,99	,86	,60	,89	,196	,141	,101	,147	,176	,142	,31	,200	,90	,149	,102	,105	,163	,92,47	,208	,150	,153	,165	,106	,55	,113	,154	,79	,108	,224	,166	,195	,59	,169	,114	,156	,87	,197	,116	,170	,61	,177	,91	,198	,172	,120	,201	,62	,143	,103	,178	,93	,202	,107	,180	,151	,209	,94	,204	,155	,210	,109	,184	,115	,167	,225	,157	,110	,117	,212	,171	,226	,216	,158	,118	,173	,121	,199	,179	,228	,174	,122	,203	,63	,181	,232	,124	,205	,182	,211	,185	,240	,206	,95	,213	,186	,227	,111	,214	,188	,217	,229	,159	,119	,218	,230	,233	,175	,123	,220	,183	,234	,125	,241	,207	,187	,236	,126	,242	,244	,189	,215	,219	,231	,248	,190	,221	,235	,222	,237	,243	,238	,245	,127	,191	,246	,249	,250	,252	,223	,239	,251	,247	,253	,254	,255])
+        elif self.N == 128:
+            pw_order_array = np.array([0	,1	,2	,4	,8	,16	,32	,3	,5	,64	,9	,6	,17	,10	,18	,12	,33	,65	,20	,34	,24	,36	,7	,66	,11	,40	,68	,19	,13	,48	,14	,72	,21	,35	,26	,80	,37	,25	,22	,38	,96	,67	,41	,28	,69	,42	,49	,74	,70	,44	,81	,50	,73	,15	,52	,23	,76	,82	,56	,27	,97	,39	,84	,29	,43	,98	,88	,30	,71	,45	,100	,51	,46	,75	,104	,53	,77	,54	,83	,57	,112	,78	,85	,58	,99	,86	,60	,89	,101	,31	,90	,102	,105	,92	,47	,106	,55	,113	,79	,108	,59	,114	,87	,116	,61	,91	,120	,62	,103	,93	,107	,94	,109	,115	,110	,117	,118	,121	,122	,63	,124	,95	,111	,119	,123	,125	,126	,127])
+        elif self.N == 64:
+            pw_order_array = np.array([0	,1	,2	,4	,8	,16	,32	,3	,5	,9	,6	,17	,10	,18	,12	,33	,20	,34	,24	,36	,7	,11	,40	,19	,13	,48	,14	,21	,35	,26	,37	,25	,22	,38	,41	,28	,42	,49	,44	,50	,15	,52	,23	,56	,27	,39	,29	,43	,30	,45	,51	,46	,53	,54	,57	,58	,60	,31	,47	,55	,59	,61	,62	,63])
+        elif self.N == 32:
+            pw_order_array = np.array([0	,1	,2	,4	,8	,16	,3	,5	,9	,6	,17	,10	,18	,12	,20	,24	,7	,11	,19	,13	,14	,21	,26	,25	,22	,28	,15	,23	,27	,29	,30	,31])
+        elif self.N == 16:
+            pw_order_array = np.array([0	,1	,2	,4	,8	,3	,5	,9	,6	,10	,12	,7	,11	,13	,14	,15])
+        elif self.N == 8:
+            pw_order_array = np.array([0	,1	,2	,4	,3	,5	,6	,7])
+        elif self.N == 4:
+            pw_order_array = np.array([0	,1	,2	,3])
+        elif self.N == 2:
+            pw_order_array = np.array([0	,1])
+        else:
+            self.pw_order_array = np.array([0	,1	,2	,4	,8	,16	,32	,3	,5	,64	,9	,6	,17	,10	,18	,128	,12	,33	,65	,20	,256	,34	,24	,36	,7	,129	,66	,512	,11	,40	,68	,130	,19	,13	,48	,14	,72	,257	,21	,132	,35	,258	,26	,513	,80	,37	,25	,22	,136	,260	,264	,38	,514	,96	,67	,41	,144	,28	,69	,42	,516	,49	,74	,272	,160	,520	,288	,528	,192	,544	,70	,44	,131	,81	,50	,73	,15	,320	,133	,52	,23	,134	,384	,76	,137	,82	,56	,27	,97	,39	,259	,84	,138	,145	,261	,29	,43	,98	,515	,88	,140	,30	,146	,71	,262	,265	,161	,576	,45	,100	,640	,51	,148	,46	,75	,266	,273	,517	,104	,162	,53	,193	,152	,77	,164	,768	,268	,274,518	,54	,83	,57	,521	,112	,135	,78	,289	,194	,85	,276	,522	,58	,168	,139	,99	,86	,60	,280	,89	,290	,529	,524	,196	,141	,101	,147	,176	,142	,530	,321	,31	,200	,90	,545	,292	,322	,532	,263	,149	,102	,105	,304	,296	,163	,92	,47	,267	,385	,546	,324	,208	,386	,150	,153	,165	,106	,55	,328	,536	,577	,548	,113	,154	,79	,269	,108	,578	,224	,166	,519	,552	,195	,270	,641	,523	,275	,580	,291	,59	,169	,560	,114	,277	,156	,87	,197	,116	,170	,61	,531	,525	,642	,281	,278	,526	,177	,293	,388	,91	,584	,769	,198	,172	,120	,201	,336	,62	,282	,143	,103	,178	,294	,93	,644	,202	,592	,323	,392	,297	,770	,107	,180	,151	,209	,284	,648,94	,204	,298	,400	,608	,352	,325	,533	,155	,210	,305	,547	,300	,109	,184	,534	,537	,115	,167	,225	,326	,306	,772	,157	,656	,329	,110	,117	,212	,171	,776	,330	,226	,549	,538	,387	,308	,216	,416	,271	,279	,158	,337	,550	,672	,118	,332	,579	,540	,389	,173	,121	,553	,199	,784	,179	,228	,338	,312	,704	,390	,174	,554	,581	,393	,283	,122	,448	,353	,561	,203	,63	,340	,394	,527	,582	,556	,181	,295	,285	,232	,124	,205	,182	,643	,562	,286	,585	,299	,354	,211	,401	,185	,396	,344	,586	,645	,593	,535	,240	,206	,95	,327	,564	,800	,402	,356	,307	,301	,417	,213	,568	,832	,588	,186	,646	,404	,227	,896	,594	,418	,302	,649	,771	,360	,539	,111	,331,214	,309	,188	,449	,217	,408	,609	,596	,551	,650	,229	,159	,420	,310	,541	,773	,610	,657	,333	,119	,600	,339	,218	,368	,652	,230	,391	,313	,450	,542	,334	,233	,555	,774	,175	,123	,658	,612	,341	,777	,220	,314	,424	,395	,673	,583	,355	,287	,183	,234	,125	,557	,660	,616	,342	,316	,241	,778	,563	,345	,452	,397	,403	,207	,674	,558	,785	,432	,357	,187	,236	,664	,624	,587	,780	,705	,126	,242	,565	,398	,346	,456	,358	,405	,303	,569	,244	,595	,189	,566	,676	,361	,706	,589	,215	,786	,647	,348	,419	,406	,464	,680	,801	,362	,590	,409	,570	,788	,597	,572	,219	,311	,708	,598	,601	,651	,421	,792	,802	,611	,602	,410	,231	,688	,653	,248	,369	,190,364	,654	,659	,335	,480	,315	,221	,370	,613	,422	,425	,451	,614	,543	,235	,412	,343	,372	,775	,317	,222	,426	,453	,237	,559	,833	,804	,712	,834	,661	,808	,779	,617	,604	,433	,720	,816	,836	,347	,897	,243	,662	,454	,318	,675	,618	,898	,781	,376	,428	,665	,736	,567	,840	,625	,238	,359	,457	,399	,787	,591	,678	,434	,677	,349	,245	,458	,666	,620	,363	,127	,191	,782	,407	,436	,626	,571	,465	,681	,246	,707	,350	,599	,668	,790	,460	,249	,682	,573	,411	,803	,789	,709	,365	,440	,628	,689	,374	,423	,466	,793	,250	,371	,481	,574	,413	,603	,366	,468	,655	,900	,805	,615	,684	,710	,429	,794	,252	,373	,605	,848	,690	,713	,632	,482	,806	,427	,904,414	,223	,663	,692	,835	,619	,472	,455	,796	,809	,714	,721	,837	,716	,864	,810	,606	,912	,722	,696	,377	,435	,817	,319	,621	,812	,484	,430	,838	,667	,488	,239	,378	,459	,622	,627	,437	,380	,818	,461	,496	,669	,679	,724	,841	,629	,351	,467	,438	,737	,251	,462	,442	,441	,469	,247	,683	,842	,738	,899	,670	,783	,849	,820	,728	,928	,791	,367	,901	,630	,685	,844	,633	,711	,253	,691	,824	,902	,686	,740	,850	,375	,444	,470	,483	,415	,485	,905	,795	,473	,634	,744	,852	,960	,865	,693	,797	,906	,715	,807	,474	,636	,694	,254	,717	,575	,913	,798	,811	,379	,697	,431	,607	,489	,866	,723	,486	,908	,718	,813	,476	,856	,839	,725	,698	,914	,752	,868,819	,814	,439	,929	,490	,623	,671	,739	,916	,463	,843	,381	,497	,930	,821	,726	,961	,872	,492	,631	,729	,700	,443	,741	,845	,920	,382	,822	,851	,730	,498	,880	,742	,445	,471	,635	,932	,687	,903	,825	,500	,846	,745	,826	,732	,446	,962	,936	,475	,853	,867	,637	,907	,487	,695	,746	,828	,753	,854	,857	,504	,799	,255	,964	,909	,719	,477	,915	,638	,748	,944	,869	,491	,699	,754	,858	,478	,968	,383	,910	,815	,976	,870	,917	,727	,493	,873	,701	,931	,756	,860	,499	,731	,823	,922	,874	,918	,502	,933	,743	,760	,881	,494	,702	,921	,501	,876	,847	,992	,447	,733	,827	,934	,882	,937	,963	,747	,505	,855	,924	,734	,829	,965	,938	,884	,506	,749	,945,966	,755	,859	,940	,830	,911	,871	,639	,888	,479	,946	,750	,969	,508	,861	,757	,970	,919	,875	,862	,758	,948	,977	,923	,972	,761	,877	,952	,495	,703	,935	,978	,883	,762	,503	,925	,878	,735	,993	,885	,939	,994	,980	,926	,764	,941	,967	,886	,831	,947	,507	,889	,984	,751	,942	,996	,971	,890	,509	,949	,973	,1000	,892	,950	,863	,759	,1008	,510	,979	,953	,763	,974	,954	,879	,981	,982	,927	,995	,765	,956	,887	,985	,997	,986	,943	,891	,998	,766	,511	,988	,1001	,951	,1002	,893	,975	,894	,1009	,955	,1004	,1010	,957	,983	,958	,987	,1012	,999	,1016	,767	,989	,1003	,990	,1005	,959	,1011	,1013	,895	,1006	,1014	,1017	,1018	,991	,1020	,1007	,1015	,1019	,1021	,1022	,1023])
+            print("not supported by PW")
+            exit()
+        #self.info_sel = np.zeros(self.N, dtype=int)
+        self.info_sel = []
+        pw_sel_index = self.N - 1
+        pwSortedOrder = np.zeros(self.N)
+        for i in range(0, self.N):
+            pwSortedOrder[i] = pw_order_array[pw_sel_index]
+            pw_sel_index -= 1
+
+        for i in range(0, self.K):
+            #self.info_sel[int(pwSortedOrder[i])] = 1
+            self.info_sel.append(int(pwSortedOrder[i]))
+        self.info_sel = np.asarray(self.info_sel)
+        self.info_set = np.sort(self.info_sel)
+
+
+    def Info_Bha(self):
+        sort = np.copy(self.bha_list)
+        sort = np.sort(sort) #sort bha_list (ascending order)
+        threshold = sort[self.K - 1]
+        self.frozen_set = []
+        for i in range(self.N):
+            if(self.bha_list[i]>threshold):
+                self.frozen_set.append(i)
+        self.info_set = [i for i in range(self.N) if i not in self.frozen_set]
+        if(len(self.info_set)!=self.K):
+            print("info size is wrong")
+
+    def Generator_Polar(self):
+        '''
+        #permutation_matrix
+        self.Permutation_mat = np.zeros((self.N,self.N))
+        for i in range(self.N):
+            i_reversal = int(bin(i)[2:].zfill(self.n)[::-1], 2)
+            self.Permutation_mat[i, i_reversal] = 1
+        '''
+        #permutation_vector
+        self.Permutation_vec = [bit_reverse(i, self.n) for i in range(self.N)]
+        #F_N
+        F_2 = np.array([[1,0],
+                        [1,1]])
+        self.F_N = np.array([[1]])
+        for i in range(self.n):
+            self.F_N = np.kron(self.F_N, F_2)
+
+        #self.G_Polar = np.matmul(self.Permutation_mat,self.F_N)
+        self.G_Polar = self.F_N[self.Permutation_vec, :]
+
+    def crc_generator_matrix(self):
+        #K is message length == N_message
+        #K + self.CRC is the size of information sets ==N_information
+
+        r = self.CRC
+        m = self.M
+        k = m+r
+
+        if self.CRC == 4:
+            self.CRC_poly = np.array([1,0,0,1,1], dtype=np.int8)
+        elif self.CRC == 6:
+            self.CRC_poly = np.array([1,1,0,0,0,0,1], dtype=np.int8)
+        elif self.CRC == 8:
+            self.CRC_poly = np.array([1,0,0,0,0,0,1,1,1], dtype=np.int8)
+        elif self.CRC == 11:
+            self.CRC_poly = np.array([1,1,1,0,0,0,1,0,0,0,0,1], dtype=np.int8)
+        elif self.CRC == 16:
+            self.CRC_poly = np.array([1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1], dtype=np.int8)
+            #self.CRC_poly = np.array([1,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,1], dtype=np.int8)
+        elif self.CRC == 24:
+            self.CRC_poly = np.array([1,1,0,1,1,0,0,1,0,1,0,1,1,0,0,0,1,0,0,0,1,0,1,1,1], dtype=np.int8)
+        else:
+            print("In SelCRCpoly(): CRC", self.CRC, " are not supported!!!")
+
+        G = np.zeros((m, k), dtype=np.int8)
+
+        for i in range(m):
+            G[i, i] = 1
+            # 這裡模擬訊息左移 r 位後做模2除法得到的餘數
+            msg = np.zeros(m + r, dtype=np.int8)
+            msg[i] = 1  # 單位訊號
+            # 做mod2除法來模擬CRC餘數
+            for j in range(i, i + r + 1):
+                if msg[j] == 1:
+                    for l in range(r + 1):
+                        if j + l < m + r:
+                            msg[j + l] ^= self.CRC_poly[l]
+            G[i, m:] = msg[m:]  # 取餘數部分作為CRC bits
+        self.G_CRC = G.copy()
+
+    def compute_crc_syndrome(self, data_bits): ##, poly_bits):
+        """
+        data_bits: list of int or NumPy array (0/1 bits)
+        poly_bits: list of int or NumPy array (CRC polynomial bits)
+        return NumPy array representing the CRC syndrome
+        """
+        data = np.array(data_bits).copy()
+        poly = self.CRC_poly.copy()
+
+        data = data.astype(np.int8)
+        poly = poly.astype(np.int8)
+
+        poly_len = len(poly)
+
+        for i in range(len(data) - poly_len + 1):
+            if data[i] == 1:
+                data[i:i + poly_len] ^= poly
+
+        return data[-(poly_len - 1):]
+
+    def book(self):
+        #level_book & reverse_book construction
+        self.level_book = []    # 1 + num of consecutive 0 from MSB
+        self.reverse_book = []
+        for dec_bit in range(self.N):
+            dec_bit_r = int(bin(dec_bit)[2:].zfill(self.n)[::-1], 2)
+            tmp = bin(dec_bit_r)[2:].zfill(self.n)
+            level = 1
+            for j in range(self.n):
+                if(tmp[j] == '0'):
+                    level = level + 1
+                else:
+                    break
+            self.level_book.append(level)
+            self.reverse_book.append(dec_bit_r)
+
+        self.level_book[0] = self.n #bit 0 condition
+        #print(self.level_book)
+        #print(self.reverse_book)
+
+    def batch_generator(self, std_noise):#return (Batch,N) &(Batch,M)
+        ##random message with BPSK done
+        ##include frozen set
+
+        ##message = np.random.randint(0, 2, size= self.M)
+        message = np.zeros(self.M, dtype=int)
+
+        if(self.CRC>0):
+            information = np.matmul(message, self.G_CRC) %2  #(Batch, M)(M, K)->(Batch, K)
+        else:
+            information = message
+        codeword = np.zeros(self.N)
+        ##for i, val in enumerate(self.info_set):
+        ##    codeword[val] = information[i]
+        codeword[self.info_set]= information
+        codeword_polar = np.matmul(codeword, self.G_Polar) %2
+        codeword_bpsk = 1 - (2*codeword_polar)
+
+        noise = np.random.normal(scale= std_noise, size= codeword_bpsk.shape)
+        ##noise = 0
+        x = codeword_bpsk + noise
+        llr = 2*x / (std_noise**2)
+        y = message
+        return llr, y
+
+    def SCL_decoder(self, LLR, flip_func, flip_arr):
+        llr = np.zeros((2*self.List, self.N, self.n+1), dtype=np.float32)
+        bit = np.zeros((2*self.List, self.N, self.n+1), dtype=np.int8)
+        pm = np.zeros((2*self.List, self.N), dtype=np.float32)
+        crc_syndrome_list = np.zeros((self.List, self.CRC), dtype=np.int8)
+
+        llr[0, :, 0] = LLR
+
+        l = 1
+        #print(f"|||||||||||||||||||||||||||||||||||||||")
+        #build polar code factor graph feature
+        for dec_bit in range(self.N):
+            depth = self.level_book[dec_bit]
+            dec_bit_r = self.reverse_book[dec_bit]
+            reverse_bin = (bin(dec_bit_r)[2:].zfill(self.n))
+            bit_bin = (bin(dec_bit)[2:].zfill(self.n))
+            ##print(f"---------------------------------")
+            ##print(f"dec_bit={dec_bit}, dec_bit_r={dec_bit_r},depth={depth}")
+            ##print(f"bit_bin={bit_bin}, reverse_bin={reverse_bin}")
+        #LLRs
+            for i in range(self.n-depth,self.n):#working level is from 0 to n-1 corresponding to depth from 1 to n
+                #use the right side of butterfly to label level, so times and dist can be as below
+                times = int(2**(self.n-1-i))
+                dist = int(2**i)
+                if( bit_bin[i]== '0' ):    # self.N=8, dec_bit=4(100), dec_bit_r=1(001) do f <- f <- g
+                    #f-function                                     # self.N=8, dec_bit=1, dec_bit_r=4 do g
+                    ##print('LLRs')
+                    ##print(f"f at level {i} with times {times} dist {dist}")
+                    for j in range(times):
+                    ##    print(dec_bit_r + ((2*j)*dist),end=' ')
+                    ##    print(dec_bit_r + ((2*j + 1)*dist))
+                        for k in range(l):
+                            llr[k, dec_bit_r + ((2*j)*dist), i+1] = f_func(
+                            llr[k, dec_bit_r + ((2*j)*dist), i],
+                            llr[k, dec_bit_r + ((2*j + 1)*dist), i])
+                else:
+                    #g-function
+                    ##print('LLRs')
+                    ##print(f"g at level {i} with times {times} dist {dist}")
+                    for j in range(times):
+                    ##    print(dec_bit_r + ((2*j)*dist),end=' ')
+                    ##    print(dec_bit_r + ((2*j - 1)*dist))
+                        for k in range(l):
+                            llr[k, dec_bit_r + ((2*j)*dist), i+1]= g_func(
+                            llr[k, dec_bit_r + ((2*j)*dist), i],
+                            llr[k, dec_bit_r + ((2*j - 1)*dist), i],
+                            bit[k, dec_bit_r + ((2*j - 1)*dist), i+1])
+        #llr ends
+        # do path expansion , path pruning & line up by PM
+            if(dec_bit in self.info_set):
+                pm[0:l, dec_bit] = pm[0:l, dec_bit-1]
+                bit[l:(2*l), :, :] = bit[0:l, :, :]
+                llr[l:(2*l), :, :] = llr[0:l, :, :]
+                bit[0:l, dec_bit_r, 0] = np.less_equal(llr[0:l, dec_bit_r, 0], 0)
+                bit[l:(2*l), dec_bit_r, 0] = (bit[0:l, dec_bit_r, 0] + 1) %2
+                pm[l:(2*l), dec_bit] = pm[0:l, dec_bit] + np.abs(llr[0:l, dec_bit_r,0])
+
+                if((2*l) > self.List):
+                    pm_tmp = pm[:(2*l), :].copy()
+                    idx_pm_sort = np.argsort(pm_tmp[:(2*l), dec_bit])
+                    reserved_path = idx_pm_sort[:l]
+                    deleted_path = idx_pm_sort[l:]
+
+                    bit_tmp = np.copy(bit[:, :, :])
+                    llr_tmp = np.copy(llr[:, :, :])
+
+                    if((dec_bit in flip_arr)and(flip_func == 1)):
+                    ##if( (flip_arr[dec_bit]==1) and (flip_func == 1) ):
+                        path = deleted_path
+                        #print('flip', end=' ')
+                    else:
+                        path = reserved_path
+                    '''
+                    print(pm[0:(2*l), dec_bit])
+                    print(idx_pm_sort)
+                    print(reserved_path)
+                    print(deleted_path)
+                    input("Press Enter to continue...")
+                    '''
+                    # get chosen path
+                    pm[:l, :]   = pm_tmp[path, :]
+                    bit[:l, :, :] = bit_tmp[path, :, :]
+                    llr[:l, :, :] = llr_tmp[path, :, :]
+
+                else:
+                    #bit[l:(2*l), :, :] = bit[0:l, :, :]
+                    #llr[l:(2*l), :, :] = llr[0:l, :, :]
+                    l=min(2*l, self.List)
+            #frozen bits
+            else:
+                pm[0:l, dec_bit] = pm[0:l, dec_bit-1]
+                #penalize the path indicates frozen bit to be 1
+                for i in range(l):
+                    if(llr[i, dec_bit_r,0] < 0):
+                        pm[i, dec_bit] = pm[i, dec_bit] + np.abs(llr[i, dec_bit_r,0])
+                bit[0:l, dec_bit_r, 0] = 0
+
+                bit_tmp = np.copy(bit[:, :, :])
+                llr_tmp = np.copy(llr[:, :, :])
+                pm_tmp = np.copy(pm)
+                idx_pm_sort = np.argsort(pm[0:l, dec_bit])
+
+
+                pm[:l, :] = pm_tmp[idx_pm_sort, :]
+                bit[:l, :, :] = bit_tmp[idx_pm_sort, :, :]
+                llr[:l, :, :] = llr_tmp[idx_pm_sort, :, :]
+
+        #path expansion & Bit decision end
+        #Bits(the depth of Bits is the next LLRs' depth - 1)
+            if(((dec_bit%2)==1) and (dec_bit!=self.N-1)):
+                depth = self.level_book[dec_bit+1] - 1
+                for i in range(self.n-1, self.n-1-depth, -1): #working level is from n-1 to 1 corresponding to next depth from 1 to n
+                    #use the right side of butterfly to label level, so times and dist can be as below
+                    times = int(2**(self.n-1-i))
+                    dist = int(2**i)
+                    ##print('Bits')
+                    ##print(f"at level {i} with times {times} dist {dist}")
+                    for j in range(times):
+                    ##    print(dec_bit_r - ((2*j +1)*dist),end=' ')
+                    ##    print(dec_bit_r - ((2*j)*dist))
+                        bit[:, dec_bit_r - (2*j +1)*dist, i] = (bit[:, dec_bit_r - (2*j)*dist, i+1] + bit[:, dec_bit_r - (2*j +1)*dist, i+1]) % 2
+                        bit[:, dec_bit_r - (2*j)*dist, i] = bit[:, dec_bit_r - (2*j)*dist, i+1]
+        #Bits ends
+    #codeword decision done by CRC in order of PM
+
+        ##print(pm[0:l,-1])
+        ##input("Press Enter to continue...")
+
+        if(self.CRC>0): #CRC check
+            for i in range(l):
+                crc_syndrome_list[i] =self.compute_crc_syndrome(bit[i, self.Permutation_vec, 0][self.info_set])
+            #find out if there any result pass crc check
+            flag = 1
+            i=0
+            for i in range(l):
+                flag*=np.any(crc_syndrome_list[i]) #if any decoded result pass crc -> flag =0
+
+            ##print(f"flag = {flag}")
+            pm_order = np.argsort(pm[0:l ,-1])
+            #pm_order = range(l)
+            if(flag==0):
+                for i in range(l):
+                    if(np.any(crc_syndrome_list[ pm_order[i] ])==0):
+
+                        decoded = bit[pm_order[i], :, 0]            # shape (N,)
+                        decoded = decoded[self.Permutation_vec]     # bit-reversal 排序
+                        info_bits = decoded[self.info_set]          # 取出 info set 的 K bits
+                        y_hat = info_bits[:self.M]                  # 最前面的 M bits 為 message bits
+
+                        decoded = llr[pm_order[i], :, 0]            # shape (N,)
+                        decoded = decoded[self.Permutation_vec]     # bit-reversal 排序
+                        info_bits = decoded[self.info_set]          # 取出 info set 的 K bits
+                        y_soft = info_bits[:self.M]                 # 最前面的 M bits 為 message bits
+
+                        crc_syndrome = crc_syndrome_list[ pm_order[i] ]
+                        break
+                    else:
+                        if(i==(l-1)):
+                            print(f"commit error in crc flag algo")
+            else:
+                decoded = bit[pm_order[0], :, 0]            # shape (N,)
+                decoded = decoded[self.Permutation_vec]     # bit-reversal 排序
+                info_bits = decoded[self.info_set]          # 取出 info set 的 K bits
+                y_hat = info_bits[:self.M]                  # 最前面的 M bits 為 message bits
+
+                decoded = llr[pm_order[0], :, 0]            # shape (N,)
+                decoded = decoded[self.Permutation_vec]     # bit-reversal 排序
+                info_bits = decoded[self.info_set]          # 取出 info set 的 K bits
+                y_soft = info_bits[:self.M]                 # 最前面的 M bits 為 message bits
+
+                crc_syndrome = crc_syndrome_list[ pm_order[0] ]
+        else:
+            pm_order = np.argsort(pm[ : ,-1])
+
+            decoded = bit[pm_order[0], :, 0]            # shape (N,)
+            decoded = decoded[self.Permutation_vec]     # bit-reversal 排序
+            info_bits = decoded[self.info_set]          # 取出 info set 的 K bits
+            y_hat = info_bits[:self.M]                  # 最前面的 M bits 為 message bits
+
+            decoded = llr[pm_order[0], :, 0]            # shape (N,)
+            decoded = decoded[self.Permutation_vec]     # bit-reversal 排序
+            info_bits = decoded[self.info_set]          # 取出 info set 的 K bits
+            y_soft = info_bits[:self.M]                 # 最前面的 M bits 為 message bits
+
+            crc_syndrome = crc_syndrome_list[ pm_order[0] ]
+
+        return y_hat, y_soft, pm, crc_syndrome
+
+
+    def Flip_choice(self, PM_in):#PM(Batch, 2*List, self.N) should input only one batch -> PM_in(2*List, N)
+        #flip_array = np.zeros(self.N, dtype=np.uint8) # 1 for index needed flip, 0 for others
+        n_l = int(np.log2(self.List))
+        flip_metric = np.zeros(len(self.info_set))
+        flip_indice = []
+        '''
+        #compute flip metric in information set/first log_2(N) bit panyihan method
+        for i, idx in enumerate(self.info_set):
+            numerator = 0
+            denominator = 0
+            for j in range(self.List):
+                numerator += np.exp(-PM_in[j, idx])
+                denominator += np.exp(-PM_in[j+self.List, idx])
+            flip_metric[i] = numerator/pow(denominator, self.Alpha)
+            '''
+        #compute flip metric in information set/first log_2(N) bit by new method
+        for i, idx in enumerate(self.info_set):
+            survive = 0
+            discard = 0
+            for j in range(self.List):
+                survive += PM_in[j, idx]
+                discard += PM_in[j+self.List, idx]
+            flip_metric[i] = survive - discard
+
+        #point out the T significant candidates info bit and transform them into polar code index
+        order = np.argsort(flip_metric[n_l:])[:self.T_flip]
+        flip_indice = [ self.info_set[i+n_l] for i in order ]
+
+        #flip_array[flip_indice] = 1  #retrun flip candidate in boolyn form length N vector if needed
+
+        return flip_indice
+
+def RightShift(array, len, numShift):
+    for i in range(len-numShift-1, -1, -1):
+        array[i+numShift] = array[i]
+    for i in range(0, numShift):
+        array[i] = 0
+
+    return array
+
+'''
+if __name__ == '__main__':
+    #Z = 1.96 # 0.95 confidential level
+    Z = 1
+    ratio_Pe = 0.1
+    SNR_in_db = [1.5]
+    #SNR_in_db = [1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2]
+    Err_num = int(pow((Z/ratio_Pe),2))
+    Batch = 100
+
+    ##N = 1024
+    N = 64
+    R = 0.5
+    M = int(N*R)
+    CRC_bits = 16
+    List = 2
+    T = 50
+    O = 1
+    Alpha = 1.2
+    total_err_bit = np.zeros(len(SNR_in_db))
+    total_err_frame = np.zeros(len(SNR_in_db))
+    total_ber = np.zeros(len(SNR_in_db))
+    total_fer = np.zeros(len(SNR_in_db))
+
+
+    filename_1 = "SCLF00_FER_N_"+str(N)+"_CRC_"+str(CRC_bits)+"_List_"+str(List)+"_Order_"+str(O)+"_PW.txt"
+    #filename_2 = "SCL_BER_N_"+str(N)+"_CRC_"+str(CRC_bits)+"_List_"+str(List)+"_Order_"+str(O)+"_PW.txt"
+
+    f1 = open(filename_1,"w")
+    #f2 = open(filename_2,"w")
+    #f3 = open("crc_check.txt","w")
+    polar = polar_code(0.5, N, R, CRC_bits, List, O, T, Alpha)
+
+
+    print(polar.info_set)
+    input("Press Enter to continue...")
+
+
+
+    for s in range(len(SNR_in_db)):
+        snr = SNR_in_db[s]
+        Var = 1 / (2 * R * pow(10.0, snr / 10.0))
+        sigma = pow(Var, 1 / 2)
+        Frame = 0
+
+        while(total_err_frame[s] <Err_num):
+            X, Y= polar.batch_generator(Batch, sigma)
+            for i in range(Batch):
+                print("SNR=",snr,"Frame=",Frame,"err=",total_err_frame[s], end="\r",flush=True)
+                Frame += 1
+                Flip = 0
+                Order = 0
+                x=X[i]
+                y=Y[i]
+
+                Y_hat, Y_soft, PM, CRC_syndrome = polar.SCL_decoder(x, Flip, []) # first SCL
+                Y_0 = Y_hat
+                PM_0 = PM
+                ##input("Press Enter to continue...")
+                Flip_list = {}
+                Flip_list[Order+1] = np.asarray(polar.Flip_choice(PM))
+                Flip_list[Order+1] = np.expand_dims(Flip_list[Order+1], axis=1)
+
+
+                while(np.any(CRC_syndrome) == True): #while(CRC_syndrome is nonzero):
+                    Flip = 1
+                    flip_tmp = [] # used to build the Flip_list of next order
+                    if(Order<O):
+                        Order += 1
+                    else:
+                        Y_hat = Y_0
+                        #print('flip decoding fail')
+                        break
+                    #for j in range(T**Order):
+                    j=0
+                    while(j<pow(T,Order)):
+                        #str_pm = '_'.join([str(x) for x in locals()['Flip_list'+str(Order)][j]])
+                        Y_hat, Y_soft, PM, CRC_syndrome = polar.SCL_decoder(X[i], Flip, Flip_list[Order][j])
+                        if((np.any(CRC_syndrome)==False)):
+                            flip_arr_correct = Flip_list[Order][j]
+                            #print('flip decoding succeed')
+                            break
+
+                        Idx_Flip = polar.Flip_choice(PM)
+                        #print(j,' ',len(Idx_Flip),end='\n')
+                        flip_tmp.append(Idx_Flip)
+                        j=j+1
+
+                    if(np.any(CRC_syndrome) == True): #if(CRC_syndrome is all zeros):
+                        flip_n = np.expand_dims((np.asarray(flip_tmp)).flatten(), axis=1)
+                        Flip_list[Order+1] = np.repeat(Flip_list[Order], T, axis=0)
+                        Flip_list[Order+1] = np.append(Flip_list[Order+1], flip_n, axis=1)
+                        #print(locals()['Flip_list'+str(Order+1)].shape)
+
+                err_bit = np.sum(np.not_equal(Y_hat, Y[i]))
+                arr_err = np.not_equal(Y_hat, Y[i])
+                err_frame = np.sum((np.sum(arr_err)).astype(bool, copy=False))
+                #print(err_frame)
+                total_err_bit[s] += err_bit
+                total_err_frame[s] += err_frame
+
+        #print('\n')
+        total_ber[s] = total_err_bit[s]/(Frame*M)
+        total_fer[s] = total_err_frame[s]/Frame
+
+
+
+    print(total_fer)
+    f1.write(str(SNR_in_db)+"\n")
+    f1.write(str(total_fer)+"\n")
+'''
+
