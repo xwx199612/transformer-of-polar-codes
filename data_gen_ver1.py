@@ -2,7 +2,7 @@ import numpy as np
 import time
 import matplotlib.pyplot as plt
 import pdb
-import SCL_flipping as SCLF
+import LSCF as SCLF
 
 #size_train = 50000
 size_train = 50 #testing
@@ -12,15 +12,14 @@ SNR_in_db = [1.00]
 if __name__ == '__main__':
 
     cross_p = 0.5
-    N = 128
+    N = 1024
     R = 0.5
     M = int(N*R)
-    CRC_bits = 16
+    CRC_bits = 0
     List = 4
     T = 20
     O = 1
     Alpha = 1.2
-    Batch = 1
     
     polar = SCLF.polar_code(cross_p, N, R, CRC_bits, List, O, T, Alpha)
     
@@ -46,90 +45,88 @@ if __name__ == '__main__':
         num_data = 0
         while(num_data <size_train):
             
-            LLR, Y= polar.batch_generator(Batch, sigma)
-            for i in range(Batch):
-                print(f'SNR ={snr:4.3f}, Frame={Frame}, err={total_err_frame[s]}, num_data={num_data},', end="\r",flush=True)
-                Frame += 1
-                Flip_func = 0
-                Order = 0
-                llr=LLR[i]
-                y=Y[i]
-                
-                Y_hat, Y_soft, PM, CRC_syndrome = polar.SCL_decoder(llr, Flip_func, []) # first SCL with null flip array and Flip_func set to 0
-                Y_hat_0 = Y_hat.copy()
-                Y_soft_0 = Y_soft.copy()
-                PM_0 = PM.copy()                
-                CRC_syndrome_0 = CRC_syndrome.copy()
-                
-                # 初始化字典以儲存 Flip_list
-                Flip_lists = {}
-                # 產生 Flip_list[Order + 1]
-                Flip_lists[Order + 1] = np.asarray(polar.Flip_choice(PM))
-                Flip_lists[Order + 1] = np.expand_dims(Flip_lists[Order + 1], axis=1)
-                
-                while(np.any(CRC_syndrome)==1): #syndrome are nonzero
-                    Flip_func = 1
-                    flip_tmp = [] # used to build the Flip_list of next order
-                    if(Order<O):
-                        Order += 1
-                    else:
-                        Y_hat = Y_hat_0
-                        ##print('flip decoding fail')
-                        #collect failure flipping result
-                        '''
-                        flip_arr = np.zeros(N, dtype=np.uint8)
-                        flip_arr[:] = -1                #set to -1 means we doesn't find out correct flip arr 
-                        llr_all.append(LLR[i])
-                        y_all.append(Y_hat_0)
-                        y_soft_all.append(Y_soft_0)
-                        pm_all.append(PM_0)
-                        crc_sydrome_all.append(CRC_syndrome_0)
+            LLR, Y= polar.batch_generator(sigma)
+        
+            print(f'SNR ={snr:4.3f}, Frame={Frame}, err={total_err_frame[s]}, num_data={num_data},', end="\r",flush=True)
+            Frame += 1
+            Flip_func = 0
+            Order = 0
+            
+            Y_hat, Y_soft, PM, CRC_syndrome = polar.SCL_decoder(LLR, Flip_func, []) # first SCL with null flip array and Flip_func set to 0
+            Y_hat_0 = Y_hat.copy()
+            Y_soft_0 = Y_soft.copy()
+            PM_0 = PM.copy()                
+            CRC_syndrome_0 = CRC_syndrome.copy()
+            '''
+            # 初始化字典以儲存 Flip_list
+            Flip_lists = {}
+            # 產生 Flip_list[Order + 1]
+            Flip_lists[Order + 1] = np.asarray(polar.Flip_choice(PM))
+            Flip_lists[Order + 1] = np.expand_dims(Flip_lists[Order + 1], axis=1)
+            
+            while(np.any(CRC_syndrome)==1): #syndrome are nonzero
+                Flip_func = 1
+                flip_tmp = [] # used to build the Flip_list of next order
+                if(Order<O):
+                    Order += 1
+                else:
+                    Y_hat = Y_hat_0
+                    ##print('flip decoding fail')
+                    #collect failure flipping result
+                    
+                    ##flip_arr = np.zeros(N, dtype=np.uint8)
+                    ##flip_arr[:] = -1                #set to -1 means we doesn't find out correct flip arr 
+                    ##llr_all.append(LLR)
+                    ##y_all.append(Y_hat_0)
+                    ##y_soft_all.append(Y_soft_0)
+                    ##pm_all.append(PM_0)
+                    ##crc_sydrome_all.append(CRC_syndrome_0)
+                    ##flip_arr_all.append(flip_arr)
+                    ##flip_bool_all.append(0)
+                    ##
+                    ##num_data += 1
+                    
+                    break 
+                    
+                j=0
+                while(j<pow(T,Order)):
+                    
+                    Y_hat, Y_soft, PM, CRC_syndrome = polar.SCL_decoder(LLR, Flip_func, Flip_lists[Order][j])
+                    if(np.any(CRC_syndrome)==False): #syndrome are all zeros                    
+                        #collect successful flip result
+                        flip_arr= np.zeros(N, dtype=np.uint8)
+                        flip_arr[(Flip_lists[Order][j])] = 1    #Flip_lists[Order][j] is the correct flip index
+                                                                #convert index to True False array for Machine learning
+                        llr_all.append(LLR)
+                        y_all.append(Y_hat)
+                        y_soft_all.append(Y_soft)
+                        pm_all.append(PM)
+                        crc_sydrome_all.append(CRC_syndrome)
                         flip_arr_all.append(flip_arr)
-                        flip_bool_all.append(0)
+                        flip_bool_all.append(1)
                         
                         num_data += 1
-                        '''
-                        break 
+                        ##print('flip decoding succeed')
+                        break
                         
-                    j=0
-                    while(j<pow(T,Order)):
-                        
-                        Y_hat, Y_soft, PM, CRC_syndrome = polar.SCL_decoder(llr, Flip_func, Flip_lists[Order][j])
-                        if(np.any(CRC_syndrome)==False): #syndrome are all zeros                    
-                            #collect successful flip result
-                            flip_arr= np.zeros(N, dtype=np.uint8)
-                            flip_arr[(Flip_lists[Order][j])] = 1    #Flip_lists[Order][j] is the correct flip index
-                                                                    #convert index to True False array for Machine learning
-                            llr_all.append(LLR[i])
-                            y_all.append(Y_hat)
-                            y_soft_all.append(Y_soft)
-                            pm_all.append(PM)
-                            crc_sydrome_all.append(CRC_syndrome)
-                            flip_arr_all.append(flip_arr)
-                            flip_bool_all.append(1)
-                            
-                            num_data += 1
-                            ##print('flip decoding succeed')
-                            break
-                            
-                        Idx_Flip = polar.Flip_choice(PM) #list(T,)
-                        flip_tmp.append(Idx_Flip) #flip_tmp(T,T)
-                        j=j+1
-                        
-                    if(np.any(CRC_syndrome) == True):
+                    Idx_Flip = polar.Flip_choice(PM) #list(T,)
+                    flip_tmp.append(Idx_Flip) #flip_tmp(T,T)
+                    j=j+1
+                    
+                if(np.any(CRC_syndrome) == True):
 
-                        # convert flip_tmp from T times (T,) list to (T^2,1) array
-                        flip_n = np.expand_dims(np.concatenate(flip_tmp), axis=1)
-                        ##flip_n = np.expand_dims(np.asarray(flip_tmp).flatten(), axis=1) #another option for data processing
-                        # 重複 Flip_list[Order] 並附加 flip_n
-                        Flip_lists[Order+1] = np.repeat(Flip_lists[Order], T, axis=0)
-                        Flip_lists[Order+1] = np.append(Flip_lists[Order+1], flip_n, axis=1)
-                
-                err_bit = np.sum(Y_hat != Y[i])
-                err_frame = int(np.any(Y_hat != Y[i]))
-                #print(err_frame)
-                total_err_bit[s] += err_bit
-                total_err_frame[s] += err_frame
+                    # convert flip_tmp from T times (T,) list to (T^2,1) array
+                    flip_n = np.expand_dims(np.concatenate(flip_tmp), axis=1)
+                    ##flip_n = np.expand_dims(np.asarray(flip_tmp).flatten(), axis=1) #another option for data processing
+                    # 重複 Flip_list[Order] 並附加 flip_n
+                    Flip_lists[Order+1] = np.repeat(Flip_lists[Order], T, axis=0)
+                    Flip_lists[Order+1] = np.append(Flip_lists[Order+1], flip_n, axis=1)
+            '''
+            err_bit = np.sum(Y_hat != Y)
+            err_frame = int(np.any(Y_hat != Y))
+            #print(err_frame)
+            total_err_bit[s] += err_bit
+            total_err_frame[s] += err_frame
         
         #save the collected data
         np.savetxt('llr_all.txt', llr_all, fmt='%.8f')
