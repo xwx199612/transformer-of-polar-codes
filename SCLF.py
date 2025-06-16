@@ -402,10 +402,11 @@ class polar_code:
                 path.llr_tree[level][idx] = g_func(L, R, uL)
             paths = recurse(level+1, 2*idx+1, paths)
             # partial sum
-            for path in paths:
-                uL = path.bit_tree[level+1][2*idx]
-                uR = path.bit_tree[level+1][2*idx+1]
-                path.bit_tree[level][idx] = uL ^ uR
+            if level > 0:
+                for path in paths:
+                    uL = path.bit_tree[level+1][2*idx]
+                    uR = path.bit_tree[level+1][2*idx+1]
+                    path.bit_tree[level][idx] = uL ^ uR
             return paths
         
         # start with one path
