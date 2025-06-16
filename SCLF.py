@@ -341,6 +341,12 @@ class polar_code:
         ##    codeword[val] = information[i]
         codeword[self.info_set]= information
         codeword_polar = np.matmul(codeword, self.G_Polar) %2
+        print("----- 编码端调试 -----")
+        print("Message + CRC 合并信息 (K bits)：", information)
+        print("inforamtion set", self.info_set)
+        print("放入 info_set 位置后的 u (N bits)：", codeword)
+        #print("极化后得到的 codeword_polar :", codeword_polar[i])
+        print("------------------------")
         codeword_bpsk = 1 - (2*codeword_polar)
 
         ##noise = np.random.normal(scale= std_noise, size= codeword_bpsk.shape)
@@ -351,12 +357,13 @@ class polar_code:
         return llr, y
     
     def scl_decoder(self, llr, flip_arr):
+
         # init trees：每层 level 有 2**level 个节点
         llr_tree = [np.zeros(2**level) for level in range(self.n+1)]
         bit_tree = [np.zeros(2**level, dtype=int) for level in range(self.n+1)]
         # 叶子层（level=n）的初始 LLR
         llr_tree[self.n] = llr.copy()
-        
+
         pm_log = []
         
         # recursive function
@@ -427,6 +434,7 @@ class polar_code:
             best = min(crc_paths, key=lambda x: x.pm)
             # extract message
             u = best.bit_tree[self.n][rev]
+            print('decoder output before slicing but after reversing',u)
             info = u[self.info_set]
             y = info[:self.M]
         else:
@@ -434,6 +442,7 @@ class polar_code:
             best = min(paths, key=lambda x: x.pm)
             # extract message
             u = best.bit_tree[self.n][rev]
+            print('decoder output before slicing but after reversing',u)
             info = u[self.info_set]
             y = info[:self.M]
 
