@@ -352,16 +352,16 @@ class polar_code:
         n = self.n
         L= self.List
         # init trees
-        llr_tree = [np.zeros(2**(n-level)) for level in range(n+1)]
-        bit_tree = [np.zeros(2**(n-level), dtype=int) for level in range(n+1)]
-        llr_tree[n] = llr.copy()
+        llr_tree = [np.zeros(2**(self.n-level)) for level in range(self.n+1)]
+        bit_tree = [np.zeros(2**(self.n-level), dtype=int) for level in range(self.n+1)]
+        llr_tree[self.n] = llr.copy()
         
         pm_log = []
         
         # recursive function
         def recurse(level, idx, paths):
             # leaf
-            if level == n:
+            if level == self.n:
                 new_paths = []
                 for path in paths:
                     LLR = path.llr_tree[level][idx]
@@ -378,16 +378,16 @@ class polar_code:
                         new_paths.append(p)
                 #keep path metric at all idx for ML
                 metrics = [p.pm for p in new_paths]
-                pad_len = 2*L - len(metrics)
+                pad_len = 2*self.List - len(metrics)
                 if pad_len > 0:
                     metrics.extend([PAD] * pad_len)
                 pm_log.append(metrics)
                 #prune the list
                 new_paths.sort(key=lambda x: x.pm)
                 if idx in flip_arr:
-                    return new_paths[L:]
+                    return new_paths[self.List:]
                 else:
-                    return new_paths[:L]
+                    return new_paths[:self.List]
             # f stage
             for path in paths:
                 L = path.llr_tree[level+1][2*idx]
@@ -414,24 +414,24 @@ class polar_code:
         paths = recurse(0, 0, paths)
         
         # select path with least pm and crc passed
-        rev = np.array([bit_reverse(i, n) for i in range(N)])        
+        rev = np.array([bit_reverse(i, self.n) for i in range(self.N)])        
         if(self.CRC>0):
             crc_paths=[]
             for path in paths:
-                u = path.bit_tree[n][rev]
+                u = path.bit_tree[self.n][rev]
                 info = u[self.info_set]
                 if(np.any(compute_crc_syndrome(info)) == 0):
                     crc_paths.append(path)
             best = min(crc_paths, key=lambda x: x.pm)
             # extract message
-            u = best.bit_tree[n][rev]
+            u = best.bit_tree[self.n][rev]
             info = u[self.info_set]
             y = info[:self.M]
         else:
             # select best
             best = min(paths, key=lambda x: x.pm)
             # extract message
-            u = best.bit_tree[n][rev]
+            u = best.bit_tree[self.n][rev]
             info = u_hat[self.info_set]
             y = info[:self.M]
 
