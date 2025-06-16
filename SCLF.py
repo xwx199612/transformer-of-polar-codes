@@ -43,12 +43,13 @@ class Path:
         return Path(self.llr_tree, self.bit_tree, self.pm)
 
 
-def scl_decoder(llr, info_set, L, flip_arr):
+def scl_decoder(llr, info_set, List, flip_arr):
     N = len(llr)
     n = int(np.log2(N))
-    # init trees
-    llr_tree = [np.zeros(2**(n-level)) for level in range(n+1)]
-    bit_tree = [np.zeros(2**(n-level), dtype=int) for level in range(n+1)]
+    # init trees：每层 level 有 2**level 个节点
+    llr_tree = [np.zeros(2**level) for level in range(n+1)]
+    bit_tree = [np.zeros(2**level, dtype=int) for level in range(n+1)]
+    # 叶子层（level=n）的初始 LLR
     llr_tree[n] = llr.copy()
     
     pm_log = []
@@ -68,21 +69,23 @@ def scl_decoder(llr, info_set, L, flip_arr):
                         new_paths.append(p)
                 else:
                     p = path.copy()
+                    assert 0 <= idx < len(p.bit_tree[level]), \
+                        f"越界: level={level}, idx={idx}, len={len(p.bit_tree[level])}"
                     p.bit_tree[level][idx] = 0
                     p.pm += np.logaddexp(0, -LLR)
                     new_paths.append(p)
             #keep path metric at all idx for ML
             metrics = [p.pm for p in new_paths]
-            pad_len = 2*L - len(metrics)
+            pad_len = 2*List - len(metrics)
             if pad_len > 0:
                 metrics.extend([PAD] * pad_len)
             pm_log.append(metrics)
             #prune the list
             new_paths.sort(key=lambda x: x.pm)
             if idx in flip_arr:
-                return new_paths[L:]
+                return new_paths[List:]
             else:
-                return new_paths[:L]
+                return new_paths[:List]
         # f stage
         for path in paths:
             L = path.llr_tree[level+1][2*idx]
@@ -348,12 +351,10 @@ class polar_code:
         return llr, y
     
     def scl_decoder(self, llr, flip_arr):
-        N = self.N
-        n = self.n
-        L= self.List
-        # init trees
-        llr_tree = [np.zeros(2**(self.n-level)) for level in range(self.n+1)]
-        bit_tree = [np.zeros(2**(self.n-level), dtype=int) for level in range(self.n+1)]
+        # init trees：每层 level 有 2**level 个节点
+        llr_tree = [np.zeros(2**level) for level in range(self.n+1)]
+        bit_tree = [np.zeros(2**level, dtype=int) for level in range(self.n+1)]
+        # 叶子层（level=n）的初始 LLR
         llr_tree[self.n] = llr.copy()
         
         pm_log = []
@@ -433,7 +434,7 @@ class polar_code:
             best = min(paths, key=lambda x: x.pm)
             # extract message
             u = best.bit_tree[self.n][rev]
-            info = u_hat[self.info_set]
+            info = u[self.info_set]
             y = info[:self.M]
 
         return y, pm_log
