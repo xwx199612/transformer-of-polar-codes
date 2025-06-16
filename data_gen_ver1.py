@@ -2,24 +2,24 @@ import numpy as np
 import time
 import matplotlib.pyplot as plt
 import pdb
-import LSCF as SCLF
+import SCLF as SCLF
 
 #size_train = 50000
 size_train = 50 #testing
 SNR_in_db = [1.00]
 
+cross_p = 0.5
+N = 1024
+R = 0.5
+M = int(N*R)
+CRC_bits = 0
+List = 1
+T = 20
+O = 1
+Alpha = 1.2
+
 
 if __name__ == '__main__':
-
-    cross_p = 0.5
-    N = 1024
-    R = 0.5
-    M = int(N*R)
-    CRC_bits = 0
-    List = 4
-    T = 20
-    O = 1
-    Alpha = 1.2
     
     polar = SCLF.polar_code(cross_p, N, R, CRC_bits, List, O, T, Alpha)
     
@@ -52,11 +52,12 @@ if __name__ == '__main__':
             Flip_func = 0
             Order = 0
             
-            Y_hat, Y_soft, PM, CRC_syndrome = polar.SCL_decoder(LLR, Flip_func, []) # first SCL with null flip array and Flip_func set to 0
+            Y_hat, PM = polar.scl_decoder(LLR, []) # first SCL with null flip array and Flip_func set to 0
+            #Y_hat, Y_soft, PM, CRC_syndrome = SCLF.scl_decoder(LLR, polar.info_set, List, []) # first SCL with null flip array and Flip_func set to 0
             Y_hat_0 = Y_hat.copy()
-            Y_soft_0 = Y_soft.copy()
+            #Y_soft_0 = Y_soft.copy()
             PM_0 = PM.copy()                
-            CRC_syndrome_0 = CRC_syndrome.copy()
+            #CRC_syndrome_0 = CRC_syndrome.copy()
             '''
             # 初始化字典以儲存 Flip_list
             Flip_lists = {}
@@ -91,7 +92,7 @@ if __name__ == '__main__':
                 j=0
                 while(j<pow(T,Order)):
                     
-                    Y_hat, Y_soft, PM, CRC_syndrome = polar.SCL_decoder(LLR, Flip_func, Flip_lists[Order][j])
+                    Y_hat, Y_soft, PM, CRC_syndrome = polar.scl_decoder(LLR, Flip_lists[Order][j])
                     if(np.any(CRC_syndrome)==False): #syndrome are all zeros                    
                         #collect successful flip result
                         flip_arr= np.zeros(N, dtype=np.uint8)
@@ -129,12 +130,12 @@ if __name__ == '__main__':
             total_err_frame[s] += err_frame
         
         #save the collected data
-        np.savetxt('llr_all.txt', llr_all, fmt='%.8f')
-        np.savetxt('y_all.txt', y_all, fmt='%.8f')
-        np.savetxt('y_soft_all.txt', y_soft_all, fmt='%.8f')
-        np.savetxt('pm_all.txt', pm_all, fmt='%.8f')
-        np.savetxt('flip_arr_all.txt', flip_arr_all, fmt='%.8f')
-        np.savetxt('flip_bool_all.txt', flip_bool_all,)
+        ##np.savetxt('llr_all.txt', llr_all, fmt='%.8f')
+        ##np.savetxt('y_all.txt', y_all, fmt='%.8f')
+        ##np.savetxt('y_soft_all.txt', y_soft_all, fmt='%.8f')
+        ##np.savetxt('pm_all.txt', pm_all, fmt='%.8f')
+        ##np.savetxt('flip_arr_all.txt', flip_arr_all, fmt='%.8f')
+        ##np.savetxt('flip_bool_all.txt', flip_bool_all,)
         
         total_ber[s] = total_err_bit[s]/(Frame*M)
         total_fer[s] = total_err_frame[s]/Frame
