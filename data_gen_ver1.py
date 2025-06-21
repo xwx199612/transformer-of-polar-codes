@@ -5,11 +5,11 @@ import pdb
 import SCLF as SCLF
 
 #size_train = 50000
-size_train = 50 #testing
-SNR_in_db = [1.00]
+size_train = 100 #testing
+SNR_in_db = [3.00]
 
 cross_p = 0.5
-N = 1024
+N = 16
 R = 0.5
 M = int(N*R)
 CRC_bits = 0
@@ -35,30 +35,36 @@ if __name__ == '__main__':
     crc_sydrome_all=[]#(num_samples, syndrome_len) equals (num_samples, r)
     flip_arr_all=[]#(num_samples, N)
     flip_bool_all=[]#(num_samples, 1) determine whether the induced noise can be fixed or not
-    
-    for s in range(len(SNR_in_db)):
+    s = 0
+    F = 0
+    Frame = 0
+    #for num_data in range(size_train):
+    while(total_err_frame[s] < size_train):
+        Frame += 1
         snr = SNR_in_db[s]
-        Var = 1 / (2 * R * pow(10.0, snr / 10.0))
-        sigma = pow(Var, 1 / 2)
-        Frame = 0
-        
+        sigma = np.sqrt(1 / (2 * R * 10**(snr / 10)))        
+        LLR, Y= polar.batch_generator(sigma)        
+        Y_hat, PM = polar.scl_decoder(LLR, []) # first SCL with null flip array and Flip_func set to 0
+        Y_hat_0 = Y_hat.copy()
+        #Y_soft_0 = Y_soft.copy()
+        PM_0 = PM.copy()                
+        #CRC_syndrome_0 = CRC_syndrome.copy()
         num_data = 0
+        '''
         while(num_data <size_train):
             
             LLR, Y= polar.batch_generator(sigma)
-        
             print(f'SNR ={snr:4.3f}, Frame={Frame}, err={total_err_frame[s]}, num_data={num_data},', end="\r",flush=True)
             Frame += 1
             Flip_func = 0
             Order = 0
             
             Y_hat, PM = polar.scl_decoder(LLR, []) # first SCL with null flip array and Flip_func set to 0
-            #Y_hat, Y_soft, PM, CRC_syndrome = SCLF.scl_decoder(LLR, polar.info_set, List, []) # first SCL with null flip array and Flip_func set to 0
             Y_hat_0 = Y_hat.copy()
             #Y_soft_0 = Y_soft.copy()
             PM_0 = PM.copy()                
             #CRC_syndrome_0 = CRC_syndrome.copy()
-            '''
+            
             # 初始化字典以儲存 Flip_list
             Flip_lists = {}
             # 產生 Flip_list[Order + 1]
@@ -122,13 +128,13 @@ if __name__ == '__main__':
                     # 重複 Flip_list[Order] 並附加 flip_n
                     Flip_lists[Order+1] = np.repeat(Flip_lists[Order], T, axis=0)
                     Flip_lists[Order+1] = np.append(Flip_lists[Order+1], flip_n, axis=1)
-            '''
+            
             err_bit = np.sum(Y_hat != Y)
             err_frame = int(np.any(Y_hat != Y))
             #print(err_frame)
             total_err_bit[s] += err_bit
             total_err_frame[s] += err_frame
-        
+        '''
         #save the collected data
         ##np.savetxt('llr_all.txt', llr_all, fmt='%.8f')
         ##np.savetxt('y_all.txt', y_all, fmt='%.8f')
@@ -136,8 +142,23 @@ if __name__ == '__main__':
         ##np.savetxt('pm_all.txt', pm_all, fmt='%.8f')
         ##np.savetxt('flip_arr_all.txt', flip_arr_all, fmt='%.8f')
         ##np.savetxt('flip_bool_all.txt', flip_bool_all,)
+        err_bit = np.sum(Y_hat != Y)
+        err_frame = int(err_bit>0)
+        ##err_frame = int(np.any(Y_hat != Y))
+        total_err_bit[s] += err_bit
+        total_err_frame[s] += err_frame
+        ##debug print
+        
+        print(f'y_hat{Y_hat}')
+        print(f'y    {Y}')
+        print(err_bit)
+        print(err_frame)
+        input("press enter to continue")
         
         total_ber[s] = total_err_bit[s]/(Frame*M)
         total_fer[s] = total_err_frame[s]/Frame
-        
-    print(total_fer)
+        ##print(f'SNR ={snr:4.3f}, Frame={Frame}, F_err={total_err_frame[s]},B_err={total_err_bit[s]}', end="\r",flush=True)
+        ##print(f'SNR ={snr:4.3f}, Frame={Frame}, F_err={total_err_frame[s]},B_err={total_err_bit[s]}', end="\n",flush=False)        
+        ##input('press enter to conti')
+    ##print(f'SNR ={snr:4.3f}, Frame={Frame}, F_err={total_err_frame[s]},B_err={total_err_bit[s]}')
+    ##print(total_fer)
