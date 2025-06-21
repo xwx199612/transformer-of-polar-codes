@@ -3,6 +3,13 @@ import time
 import matplotlib.pyplot as plt
 import pdb
 
+np.set_printoptions(
+    ##threshold = 1000000
+    formatter={'float': '{:+7.2f}'.format},  # 每个浮点数占 8 格、保留 3 位小数
+    linewidth=800,                           # 每行最多 200 字符，尽量打印在一行内
+    suppress=True                            # 小数点后的小于 1e-4 的数字不使用科学计数法
+)
+
 PAD = 1e9
 time_duration = 1
 ## SCL decoding in this python file ##
@@ -41,86 +48,7 @@ class Path:
         self.pm = pm
     def copy(self):
         return Path(self.llr_tree, self.bit_tree, self.pm)
-
-
-def scl_decoder(llr, info_set, List, flip_arr):
-    N = len(llr)
-    n = int(np.log2(N))
-    # init trees：每层 level 有 2**level 个节点
-    llr_tree = [np.zeros(2**level) for level in range(n+1)]
-    bit_tree = [np.zeros(2**level, dtype=int) for level in range(n+1)]
-    # 叶子层（level=n）的初始 LLR
-    llr_tree[n] = llr.copy()
-    
-    pm_log = []
-    
-    # recursive function
-    def recurse(level, idx, paths):
-        # leaf
-        if level == n:
-            new_paths = []
-            for path in paths:
-                LLR = path.llr_tree[level][idx]
-                if idx in info_set:
-                    for u in [0, 1]:
-                        p = path.copy()
-                        p.bit_tree[level][idx] = u
-                        p.pm += np.logaddexp(0, (-1)**u * LLR)
-                        new_paths.append(p)
-                else:
-                    p = path.copy()
-                    assert 0 <= idx < len(p.bit_tree[level]), \
-                        f"越界: level={level}, idx={idx}, len={len(p.bit_tree[level])}"
-                    p.bit_tree[level][idx] = 0
-                    p.pm += np.logaddexp(0, -LLR)
-                    new_paths.append(p)
-            #keep path metric at all idx for ML
-            metrics = [p.pm for p in new_paths]
-            pad_len = 2*List - len(metrics)
-            if pad_len > 0:
-                metrics.extend([PAD] * pad_len)
-            pm_log.append(metrics)
-            #prune the list
-            new_paths.sort(key=lambda x: x.pm)
-            if idx in flip_arr:
-                return new_paths[List:]
-            else:
-                return new_paths[:List]
-        # f stage
-        for path in paths:
-            L = path.llr_tree[level+1][2*idx]
-            R = path.llr_tree[level+1][2*idx+1]
-            path.llr_tree[level][idx] = f_func(L, R)
-        paths = recurse(level+1, 2*idx, paths)
-        # g stage
-        for path in paths:
-            L = path.llr_tree[level+1][2*idx]
-            R = path.llr_tree[level+1][2*idx+1]
-            uL = path.bit_tree[level+1][2*idx]
-            path.llr_tree[level][idx] = g_func(L, R, uL)
-        paths = recurse(level+1, 2*idx+1, paths)
-        # partial sum
-        for path in paths:
-            uL = path.bit_tree[level+1][2*idx]
-            uR = path.bit_tree[level+1][2*idx+1]
-            path.bit_tree[level][idx] = uL ^ uR
-        return paths
-    
-    # start with one path
-    init_path = Path(llr_tree, bit_tree, 0.0)
-    paths = [init_path]
-    paths = recurse(0, 0, paths)
-    # select best
-    best = min(paths, key=lambda x: x.pm)
-    # extract message
-    rev = np.array([bit_reverse(i, n) for i in range(N)])
-    u_hat = best.bit_tree[n][rev]
-    y_hat = u_hat[info_set]
-    return y_hat
-
-
-
-
+        
 class polar_code:
     def __init__(self, cross_p, N, R, CRC, List, O, T_flip, Alpha):
         self.cross_p = cross_p
@@ -234,7 +162,7 @@ class polar_code:
             self.Permutation_mat[i, i_reversal] = 1
         '''
         #permutation_vector
-        self.Permutation_vec = [bit_reverse(i, self.n) for i in range(self.N)]
+        self.rev = [bit_reverse(i, self.n) for i in range(self.N)]
         #F_N
         F_2 = np.array([[1,0],
                         [1,1]])
@@ -243,7 +171,7 @@ class polar_code:
             self.F_N = np.kron(self.F_N, F_2)
 
         #self.G_Polar = np.matmul(self.Permutation_mat,self.F_N)
-        self.G_Polar = self.F_N[self.Permutation_vec, :]
+        self.G_Polar = self.F_N[self.rev, :]
 
     def crc_generator_matrix(self):
         #K is message length == N_message
@@ -329,61 +257,94 @@ class polar_code:
         ##random message with BPSK done
         ##include frozen set
 
-        message = np.random.randint(0, 2, size= self.M)
-        ##message = np.zeros(self.M, dtype=int)
-
+        ##message = np.random.randint(0, 2, size= self.M).astype(np.int8)
+        ##message = np.zeros(self.M, dtype=np.int8)
+        message = np.ones(self.M, dtype=np.int8)
         if(self.CRC>0):
             information = np.matmul(message, self.G_CRC) %2  #(M,)(M, K)->(K,)
         else:
             information = message
-        codeword = np.zeros(self.N)
+        codeword = np.zeros(self.N, dtype=np.int8)
         ##for i, val in enumerate(self.info_set):
         ##    codeword[val] = information[i]
         codeword[self.info_set]= information
+        codeword_rev = codeword[self.rev]
         codeword_polar = np.matmul(codeword, self.G_Polar) %2
-        print("----- 编码端调试 -----")
-        print("Message + CRC 合并信息 (K bits)：", information)
-        print("inforamtion set", self.info_set)
-        print("放入 info_set 位置后的 u (N bits)：", codeword)
-        #print("极化后得到的 codeword_polar :", codeword_polar[i])
-        print("------------------------")
+        ##debug print
+        '''
+        print(f'message is {message}')
+        print(f'info set [{self.info_set}]')
+        print(f'codeword is {codeword}')
+        print(f'codeword_rev is {codeword_rev}')
+        print(f'codeword_polar is {codeword_polar}')
+        '''
         codeword_bpsk = 1 - (2*codeword_polar)
 
-        ##noise = np.random.normal(scale= std_noise, size= codeword_bpsk.shape)
-        noise = 0
+        noise = np.random.normal(scale= std_noise, size= codeword_bpsk.shape)
+        ##noise = 0
         x = codeword_bpsk + noise
         llr = 2*x / (std_noise**2)
         y = message
+        ##return llr, codeword_rev
         return llr, y
     
     def scl_decoder(self, llr, flip_arr):
 
-        # init trees：每层 level 有 2**level 个节点
-        llr_tree = [np.zeros(2**level) for level in range(self.n+1)]
-        bit_tree = [np.zeros(2**level, dtype=int) for level in range(self.n+1)]
-        # 叶子层（level=n）的初始 LLR
-        llr_tree[self.n] = llr.copy()
+        # init trees, root at level 0
+        llr_tree = np.zeros((self.n+1, self.N), dtype =np.float64)
+        bit_tree = np.zeros((self.n+1, self.N), dtype =np.int8)
 
+        # LLR receive at root node
+        llr_tree[0] = llr.copy()
         pm_log = []
         
+        ##debug print
+        ##print('begin')
+        
         # recursive function
-        def recurse(level, idx, paths):
+        def recurse(level, idx_node, paths, idx_bit):
+            ##debug print
+            '''
+            for _ in range(level):
+                print('    ',end=' ')
+            print(f'r[{level},{idx_node}]')
+            '''
             # leaf
             if level == self.n:
+                ##debug print
+                '''
+                for j in range(level):
+                    print('    ',end=' ') 
+                print(f'leaf[{level},{idx_node}]')
+                '''
                 new_paths = []
                 for path in paths:
-                    LLR = path.llr_tree[level][idx]
-                    if idx in self.info_set:
+                    LLR = path.llr_tree[level][idx_bit]
+                    ##debug print
+                    ##print(f'llr at (level={level},idx_bit={idx_bit})={LLR}')
+                    if idx_node in self.info_set:
                         for u in [0, 1]:
                             p = path.copy()
-                            p.bit_tree[level][idx] = u
-                            p.pm += np.logaddexp(0, (-1)**u * LLR)
+                            p.bit_tree[level][idx_bit] = u
+                            if(u==0 and LLR<0) or (u==1 and LLR>=0): #path penalty
+                                p.pm+=abs(LLR)
+                            else:
+                                p.pm+=0
                             new_paths.append(p)
                     else:
                         p = path.copy()
-                        p.bit_tree[level][idx] = 0
-                        p.pm += np.logaddexp(0, -LLR)
+                        p.bit_tree[level][idx_bit] = 0
+                        if(LLR<0): #path penalty
+                            p.pm+=abs(LLR)
+                        else:
+                            p.pm+=0
                         new_paths.append(p)
+                ##debug print
+                '''        
+                print(f'len of new_paths:{len(new_paths)}')
+                for path in new_paths:
+                    print(f'u={path.bit_tree[level][idx_bit]},pm={path.pm}')
+                '''
                 #keep path metric at all idx for ML
                 metrics = [p.pm for p in new_paths]
                 pad_len = 2*self.List - len(metrics)
@@ -392,60 +353,118 @@ class polar_code:
                 pm_log.append(metrics)
                 #prune the list
                 new_paths.sort(key=lambda x: x.pm)
-                if idx in flip_arr:
+                ##debug print
+                '''
+                print(f'idx_bit={idx_bit}, after sort')
+                for path in new_paths:
+                    print(f'u={path.bit_tree[level][idx_bit]},pm={path.pm}')
+                '''
+                if idx_bit in flip_arr:
                     return new_paths[self.List:]
                 else:
                     return new_paths[:self.List]
+
             # f stage
             for path in paths:
-                L = path.llr_tree[level+1][2*idx]
-                R = path.llr_tree[level+1][2*idx+1]
-                path.llr_tree[level][idx] = f_func(L, R)
-            paths = recurse(level+1, 2*idx, paths)
+                for i in range(2**(self.n-level-1)):
+                    d = 2**level
+                    L = path.llr_tree[level][idx_bit+(2*i)*d]
+                    R = path.llr_tree[level][idx_bit+(2*i+1)*d]
+                    path.llr_tree[level+1][idx_bit+(2*i)*d] = f_func(L, R)
+                    ##debug print
+                    '''
+                    for _ in range(level):
+                        print('    ',end='')                    
+                    print(f'f[{level},{idx_bit+(2*i)*d},{idx_bit+(2*i+1)*d}]')
+                    for j in range(self.n+1):
+                        for _ in range(level):
+                            print('    ',end='')  
+                        print(path.llr_tree[j])
+                    input("press enter to conti")
+                    '''
+            paths = recurse(level+1, 2*idx_node, paths, idx_bit)
             # g stage
             for path in paths:
-                L = path.llr_tree[level+1][2*idx]
-                R = path.llr_tree[level+1][2*idx+1]
-                uL = path.bit_tree[level+1][2*idx]
-                path.llr_tree[level][idx] = g_func(L, R, uL)
-            paths = recurse(level+1, 2*idx+1, paths)
+                for i in range(2**(self.n-level-1)):
+                    d = 2**level
+                    L = path.llr_tree[level][idx_bit+(2*i)*d]
+                    R = path.llr_tree[level][idx_bit+(2*i+1)*d]
+                    uL = path.bit_tree[level+1][idx_bit+(2*i)*d]
+                    path.llr_tree[level+1][idx_bit+(2*i+1)*d] = g_func(L, R, uL)
+                    ##debug print
+                    '''
+                    for _ in range(level):
+                        print('    ',end='')                    
+                    print(f'g[{level},{idx_bit+(2*i)*d},{idx_bit+(2*i+1)*d}]')
+                    for j in range(self.n+1):
+                        for _ in range(level):
+                            print('    ',end='')
+                        print(path.llr_tree[j])
+                    input("press enter to conti")
+                    '''
+            paths = recurse(level+1, 2*idx_node+1, paths, idx_bit+(2**level))
             # partial sum
-            if level > 0:
-                for path in paths:
-                    uL = path.bit_tree[level+1][2*idx]
-                    uR = path.bit_tree[level+1][2*idx+1]
-                    path.bit_tree[level][idx] = uL ^ uR
+            ##if level > 0:
+            for path in paths:
+                for i in range(2**(self.n-level-1)):
+                    d = 2**level
+                    uL = path.bit_tree[level+1][idx_bit+(2*i)*d]
+                    uR = path.bit_tree[level+1][idx_bit+(2*i+1)*d]
+                    path.bit_tree[level][idx_bit+(2*i)*d] = uL ^ uR
+                    path.bit_tree[level][idx_bit+(2*i+1)*d] = uR
+                    ##debug print
+                    '''
+                    for _ in range(level):
+                        print('    ',end='')
+                    print(f'ps[{level},{idx_bit+(2*i)*d},{idx_bit+(2*i+1)*d}]')
+                    for j in range(self.n+1):
+                        for _ in range(level):
+                            print('    ',end='')
+                        print(path.bit_tree[j])
+                    input("press enter to conti")
+                    '''
             return paths
         
         # start with one path
         init_path = Path(llr_tree, bit_tree, 0.0)
         paths = [init_path]
-        paths = recurse(0, 0, paths)
+        paths = recurse(0, 0, paths, 0) # start recursion from root level
+        
+        ##debug print
+        ##print('end')
         
         # select path with least pm and crc passed
-        rev = np.array([bit_reverse(i, self.n) for i in range(self.N)])        
+        rev = np.array([bit_reverse(i, self.n) for i in range(self.N)])
         if(self.CRC>0):
             crc_paths=[]
             for path in paths:
-                u = path.bit_tree[self.n][rev]
+                u_rev = path.bit_tree[self.n]
+                u = r_rev[rev]
                 info = u[self.info_set]
                 if(np.any(compute_crc_syndrome(info)) == 0):
                     crc_paths.append(path)
             best = min(crc_paths, key=lambda x: x.pm)
             # extract message
-            u = best.bit_tree[self.n][rev]
-            print('decoder output before slicing but after reversing',u)
+            u_rev = best.bit_tree[self.n]
+            u= u_rev[rev]
             info = u[self.info_set]
             y = info[:self.M]
         else:
             # select best
             best = min(paths, key=lambda x: x.pm)
             # extract message
-            u = best.bit_tree[self.n][rev]
-            print('decoder output before slicing but after reversing',u)
+            u_rev = best.bit_tree[self.n]
+            u= u_rev[rev]
             info = u[self.info_set]
             y = info[:self.M]
-
+        ##debug print
+        '''
+        print('decoder output before slicing but after reversing',u_rev)
+        print('decoder output before slicing but after reversing',u)
+        print('decoder output',y)
+        '''
+        
+        ##return u_rev, pm_log
         return y, pm_log
 
     def Flip_choice(self, PM_in):#PM(Batch, 2*List, self.N) should input only one batch -> PM_in(2*List, N)
